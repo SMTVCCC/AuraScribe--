@@ -1,0 +1,3036 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>语音转文本工具 - 讯飞听见风格</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="spark-api.js"></script>
+    <script src="init-spark.js"></script>
+    <script src="traditional-simplified-mapping.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#F59E0B',
+                        neutral: {
+                            50: '#F9FAFB',
+                            100: '#F3F4F6',
+                            200: '#E5E7EB',
+                            300: '#D1D5DB',
+                            400: '#9CA3AF',
+                            500: '#6B7280',
+                            600: '#4B5563',
+                            700: '#374151',
+                            800: '#1F2937',
+                            900: '#111827',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+            min-height: 100vh;
+        }
+        
+        /* 全局动画优化 */
+        * {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            will-change: transform, opacity;
+        }
+        
+        /* 硬件加速优化 */
+        .transform-gpu {
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            perspective: 1000px;
+        }
+        
+        /* 平滑滚动 */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* 减少重绘 */
+        .hover-effect {
+            transform: translateZ(0);
+        }
+        
+        .hover-effect:hover {
+            transform: translateZ(0) translateY(-2px);
+        }
+        
+        /* 性能优化 */
+        .optimized {
+            contain: layout style paint;
+        }
+        
+        /* 减少重绘的动画 */
+        @keyframes smoothPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+        
+        .pulse-smooth {
+            animation: smoothPulse 2s ease-in-out infinite;
+        }
+        
+        /* 优化滚动性能 */
+        .scroll-smooth {
+            -webkit-overflow-scrolling: touch;
+            overflow-scrolling: touch;
+        }
+        
+        /* 页面加载动画 */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .animate-fade-in-up {
+            animation: fadeInUp 0.6s ease-out;
+        }
+        
+        .audio-player {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        /* 固定在底部的音频播放器样式 - 优雅浅色设计 */
+        .fixed-audio-player {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 28rem; /* 调整右侧边距，确保音频条长度合适，避免遮挡右侧菜单 */
+            z-index: 999;
+            background: rgba(255, 255, 255, 0.95);
+            border-top: 1px solid rgba(229, 231, 235, 0.8);
+            box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            max-height: 120px;
+        }
+        
+        /* 播放器按钮样式 */
+        .player-btn {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 12px;
+        }
+        
+        .player-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .play-btn {
+            background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+            color: white;
+        }
+        
+        .play-btn:hover {
+            background: linear-gradient(135deg, #2563EB, #1E40AF);
+        }
+        
+        .control-btn {
+            background: rgba(156, 163, 175, 0.1);
+            color: #6B7280;
+        }
+        
+        .control-btn:hover {
+             background: rgba(156, 163, 175, 0.2);
+             color: #374151;
+         }
+         
+         /* 进度条样式 */
+         .waveform {
+             position: relative;
+             transition: all 0.2s ease;
+         }
+         
+         .waveform:hover {
+             transform: scaleY(1.1);
+         }
+         
+         .waveform:hover #progressIndicator {
+             box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+         }
+         
+         /* 音频文件信息区域 */
+         .audio-info-icon {
+             background: linear-gradient(135deg, #EBF4FF, #DBEAFE);
+             border: 1px solid rgba(59, 130, 246, 0.1);
+         }
+         
+         /* 响应式设计 */
+         @media (max-width: 768px) {
+             .fixed-audio-player {
+                 padding: 1rem;
+             }
+             
+             .player-btn {
+                 transform: scale(0.9);
+             }
+         }
+        
+        /* 为固定播放器预留底部空间 */
+        .content-with-fixed-player {
+            padding-bottom: 150px; /* 增加底部空间，确保内容完全显示 */
+            min-height: 100vh; /* 确保内容区域至少占满整个视口 */
+        }
+        
+        /* 确保右侧面板不被音频播放器遮挡 */
+        .sidebar {
+            background: white;
+            border-left: 1px solid #E5E7EB;
+            min-height: 100vh;
+            padding-bottom: 150px; /* 为音频播放器预留空间 */
+        }
+        
+        /* 移动端特殊处理 */
+        @media (max-width: 768px) {
+            .fixed-audio-player {
+                right: 0 !important; /* 移动端占满宽度 */
+                left: 0;
+            }
+            
+            .content-with-fixed-player {
+                padding-bottom: 160px; /* 移动端增加更多底部空间 */
+            }
+        }
+        
+        .waveform {
+            background: linear-gradient(90deg, #3B82F6, #10B981, #F59E0B, #EF4444);
+            height: 4px;
+            border-radius: 2px;
+        }
+        
+        .transcript-text {
+            line-height: 1.8;
+            font-size: 16px;
+        }
+        
+        .transcript-segment {
+            cursor: pointer;
+            transition: all 0.2s ease;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin: 2px 0;
+            display: inline-block;
+        }
+        
+        .transcript-segment:hover {
+            background-color: #E0F2FE;
+            color: #0369A1;
+        }
+        
+        .transcript-segment.active {
+            background-color: #3B82F6;
+            color: white;
+        }
+        
+        /* sidebar样式已移至下方统一定义 */
+        
+        @keyframes pulse-progress {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .progress-shine {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+            animation: pulse-progress 1.5s infinite;
+        }
+        
+
+        
+        /* 文件上传区域样式 - 优雅升级 */
+        .upload-zone {
+            border: 2px dashed #e2e8f0;
+            border-radius: 24px;
+            cursor: pointer;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.8) 100%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.1);
+            min-height: 400px;
+            height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .upload-zone::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent);
+            transition: left 0.8s ease;
+        }
+        
+        .upload-zone:hover::before {
+            left: 100%;
+        }
+        
+        .upload-zone:hover {
+            border-color: #3b82f6;
+            background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(239,246,255,0.9) 100%);
+            box-shadow: 0 25px 50px -12px rgba(59, 130, 246, 0.25), 0 0 0 1px rgba(59, 130, 246, 0.1);
+            transform: translateY(-4px) scale(1.01);
+        }
+        
+        .upload-zone.drag-over {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.05);
+        }
+        
+        .upload-zone.drag-over .drag-overlay {
+            opacity: 1;
+        }
+        
+        /* 网格背景图案 - 动态效果 */
+        .bg-grid-pattern {
+            background-image: radial-gradient(circle, #e2e8f0 1px, transparent 1px);
+            background-size: 24px 24px;
+            animation: gridMove 20s linear infinite;
+        }
+        
+        @keyframes gridMove {
+            0% { background-position: 0 0; }
+            100% { background-position: 24px 24px; }
+        }
+        
+        /* 上传按钮样式 */
+        .upload-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            border: none;
+            outline: none;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .upload-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .upload-btn:hover::before {
+            left: 100%;
+        }
+        
+        .primary-btn {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: white;
+            box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .primary-btn::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .primary-btn:hover::after {
+            width: 300px;
+            height: 300px;
+        }
+        
+        .primary-btn:hover {
+            background: linear-gradient(135deg, #2563eb, #1e40af);
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 12px 35px 0 rgba(59, 130, 246, 0.6);
+        }
+        
+        .secondary-btn {
+            background: rgba(156, 163, 175, 0.08);
+            color: #6b7280;
+            border: 1px solid rgba(229, 231, 235, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        .secondary-btn:hover {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+            border-color: rgba(59, 130, 246, 0.3);
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
+        }
+        
+        /* 上传图标容器动画 - 增强版 */
+        .upload-icon-container {
+            animation: float 4s ease-in-out infinite;
+            position: relative;
+        }
+        
+        @keyframes float {
+            0%, 100% { 
+                transform: translateY(0px) rotate(0deg); 
+            }
+            25% { 
+                transform: translateY(-8px) rotate(1deg); 
+            }
+            50% { 
+                transform: translateY(-12px) rotate(0deg); 
+            }
+            75% { 
+                transform: translateY(-8px) rotate(-1deg); 
+            }
+        }
+        
+        /* 图标光晕效果 */
+        .upload-icon-container::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 120%;
+            height: 120%;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            animation: pulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+            50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+        }
+        
+
+        
+
+        
+        /* 拖拽覆盖层 */
+        .drag-overlay {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .upload-zone {
+                min-height: 300px;
+                border-radius: 16px;
+            }
+            
+            .upload-zone .relative.z-10 {
+                padding: 2rem;
+            }
+            
+            .upload-btn {
+                padding: 10px 20px;
+                font-size: 13px;
+            }
+            
+            .flex.justify-center.space-x-4 {
+                flex-direction: column;
+                space-x: 0;
+                gap: 0.75rem;
+            }
+            
+            .flex.justify-center.space-x-6 {
+                flex-direction: column;
+                space-x: 0;
+                gap: 0.5rem;
+            }
+        }
+        
+        /* 优化的文本显示样式 */
+        .transcript-segment {
+            position: relative;
+            display: inline-block;
+            margin: 0 1px;
+            padding: 3px 6px;
+            border-radius: 6px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 400;
+        }
+        
+        .transcript-segment:hover {
+            background-color: rgba(59, 130, 246, 0.12);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+        }
+        
+        .transcript-segment.active {
+            background-color: #3B82F6;
+            color: white;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        /* 时间戳模式样式 */
+        .timestamp-mode-container {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .segment-row {
+            border-left: 3px solid transparent;
+            transition: all 0.2s ease;
+        }
+        
+        .segment-row:hover {
+            border-left-color: #3B82F6;
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.05) 0%, transparent 100%);
+        }
+        
+
+        
+        .segment-row.long-segment {
+            background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+            border-left: 3px solid #e5e7eb;
+        }
+        
+
+        
+        /* 连续模式优化 - 段落式显示 */
+        .continuous-mode-container {
+            line-height: 1.8;
+            font-size: 15px;
+            color: #374151;
+        }
+        
+        .paragraph-block {
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+
+        
+        .paragraph-block:hover {
+            transform: translateY(-1px);
+        }
+        
+        .paragraph-content {
+            position: relative;
+        }
+        
+        .paragraph-time {
+            backdrop-filter: blur(4px);
+        }
+        
+        /* 纯文本模式 */
+        .plain-text-container {
+            background: #fafafa;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        /* 滚动条优化 */
+        .transcript-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .transcript-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 3px;
+        }
+        
+        .transcript-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        
+        .transcript-scroll::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        /* 编辑模式样式 */
+        .edit-mode-container {
+            position: relative;
+            border: 2px dashed #3b82f6;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            animation: editModeEnter 0.3s ease-out;
+        }
+        
+        @keyframes editModeEnter {
+            from {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.98);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        
+        .edited-text-badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+            animation: badgeAppear 0.5s ease-out;
+        }
+        
+        @keyframes badgeAppear {
+            from {
+                opacity: 0;
+                transform: scale(0) rotate(-180deg);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) rotate(0deg);
+            }
+        }
+        
+        /* 转录结果加载动画 */
+        .transcript-loading {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .transcript-loading::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent);
+            animation: shimmer 1.5s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        
+        /* 文本显示动画 */
+        .text-appear {
+            animation: textAppear 0.6s ease-out;
+        }
+        
+        @keyframes textAppear {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* 交互反馈增强 */
+        .interactive-element {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .interactive-element:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .interactive-element:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* 按钮点击反馈 */
+        .btn-click-feedback {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-click-feedback::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.3s, height 0.3s;
+        }
+        
+        .btn-click-feedback:active::after {
+            width: 200px;
+            height: 200px;
+        }
+        
+        /* 侧边栏收缩样式 */
+        .sidebar {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+        
+        .sidebar.collapsed {
+            width: 4rem !important;
+        }
+        
+        /* 收缩时隐藏所有内容 */
+        .sidebar.collapsed .sidebar-content {
+            display: none;
+        }
+        
+        /* 收缩时隐藏头部的所有内容，除了按钮容器 */
+        .sidebar.collapsed .border-b > .flex > .w-full > .flex > .flex:first-child {
+            display: none;
+        }
+        
+        /* 收缩时显示按钮容器并居中 */
+        .sidebar.collapsed .border-b > .flex > .w-full {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            padding: 1.5rem 0 !important;
+        }
+        
+        .sidebar.collapsed .border-b > .flex > .w-full > .flex {
+            justify-content: center !important;
+        }
+        
+        /* 确保按钮在收缩状态下可见 */
+        .sidebar.collapsed #sidebarToggle {
+            display: flex !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+        }
+        
+        /* 箭头旋转 */
+        .sidebar.collapsed .sidebar-arrow {
+            transform: rotate(180deg);
+        }
+        
+        .sidebar-content {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .sidebar-title {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .sidebar-arrow {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body>
+    <div class="flex h-screen optimized">
+        <!-- 左侧主内容区 -->
+        <div class="flex-1 flex flex-col content-with-fixed-player">
+            <!-- 顶部标题栏 -->
+            <div class="bg-gradient-to-r from-white/90 via-white/85 to-white/90 backdrop-blur-xl border-b border-neutral-200/30 px-8 py-6 animate-fade-in-up relative overflow-hidden">
+                <!-- 装饰性背景元素 -->
+                <div class="absolute inset-0 bg-gradient-to-r from-blue-50/20 via-transparent to-indigo-50/20 pointer-events-none"></div>
+                <div class="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-200/40 to-transparent"></div>
+                
+                <div class="flex items-center justify-between relative z-10">
+                    <div class="space-y-1">
+                        <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent tracking-tight">
+                            AuraScribe-聆悟
+                        </h1>
+                        <p class="text-sm text-neutral-500 font-medium tracking-wide">
+                            基于OpenAI开源项目Whisper（耳语）开发的音视频转文本工具
+                        </p>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="text-sm text-neutral-500 bg-white/60 border border-neutral-200/50 px-4 py-2 rounded-full backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300 hover:bg-white/80">
+                            <i class="fas fa-clock mr-2 text-blue-500"></i>
+                            <span id="currentTime" class="font-medium">--:--</span> 
+                            <span class="text-neutral-400 mx-1">/</span> 
+                            <span id="totalTime" class="font-medium">--:--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 转录内容区 -->
+            <div class="flex-1 p-6 overflow-y-auto scroll-smooth">
+                <!-- 文件上传区域 -->
+                <div id="uploadArea" class="mb-6 animate-fade-in-up" style="animation-delay: 0.2s;">
+                    <div id="fileDropZone" class="upload-zone group relative overflow-hidden">
+                        <input type="file" id="audioFile" accept="audio/*,video/*" style="display: none" onchange="handleFileSelect(event)">
+                        
+                        <!-- 背景装饰 - 增强版 -->
+                        <div class="absolute inset-0 bg-gradient-to-br from-blue-50/60 via-white/40 to-indigo-50/60"></div>
+                        <div class="absolute inset-0 bg-grid-pattern opacity-10"></div>
+                        <!-- 动态光效 -->
+                        <div class="absolute inset-0 bg-gradient-to-r from-transparent via-blue-100/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                        
+                        <!-- 主要内容 -->
+                        <div class="relative z-10 flex flex-col items-center justify-center h-full p-12 space-y-6">
+                            <!-- 上传图标区域 -->
+                            <div class="flex justify-center items-center">
+                                <div class="upload-icon-container relative">
+                                    <div class="w-20 h-20 bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl transform transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 relative overflow-hidden">
+                                        <div class="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent"></div>
+                                        <i class="fas fa-wave-square text-3xl text-white relative z-10"></i>
+                                    </div>
+                                    <!-- 装饰性圆圈 - 增强版 -->
+                                    <div class="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg animate-pulse">
+                                        <i class="fas fa-plus text-white text-xs"></i>
+                                    </div>
+                                    <!-- 浮动装饰 - 增强版 -->
+                                    <div class="absolute -bottom-1 -left-1 w-4 h-4 bg-gradient-to-br from-yellow-400 to-orange-400 rounded-full animate-bounce shadow-md" style="animation-delay: 0.5s;"></div>
+                                    <!-- 新增装饰元素 -->
+                                    <div class="absolute -top-1 -left-2 w-3 h-3 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full animate-ping" style="animation-delay: 1s;"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- 文本内容 -->
+                            <div class="text-center space-y-4 w-full">
+                                <h3 class="text-2xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent group-hover:from-blue-600 group-hover:to-indigo-600 transition-all duration-500">
+                                    拖放文件到此处或点击上传
+                                </h3>
+                                <p class="text-gray-600 max-w-md mx-auto leading-relaxed">
+                                    支持多种音视频格式：<span class="font-semibold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">WAV、MP3、FLAC</span> 等音频格式<br>
+                                    <span class="font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">MP4、AVI、MOV</span> 等视频格式，最大 <span class="font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">100MB</span>
+                                </p>
+                            </div>
+                            
+                            <!-- 操作按钮 -->
+                            <div class="flex justify-center items-center space-x-4 w-full">
+                                <button type="button" onclick="document.getElementById('audioFile').click()" class="upload-btn primary-btn bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-4 px-6 rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 hover:scale-[1.02] relative overflow-hidden group transform-gpu btn-click-feedback interactive-element">
+                                    <div class="w-5 h-5 bg-white/20 rounded-lg flex items-center justify-center mr-3">
+                                        <i class="fas fa-folder-open text-white text-xs"></i>
+                                    </div>
+                                    <span>选择文件</span>
+                                    <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                                </button>
+                                <button type="button" class="upload-btn secondary-btn bg-gradient-to-r from-white/90 to-neutral-50/80 hover:from-neutral-100/90 hover:to-neutral-200/80 border border-neutral-200/60 hover:border-neutral-300/70 text-neutral-700 font-semibold py-4 px-6 rounded-2xl transition-all duration-300 hover:shadow-md transform hover:-translate-y-0.5 backdrop-blur-sm group" onclick="showSupportedFormats()">
+                                    <div class="w-5 h-5 bg-blue-100/60 rounded-lg flex items-center justify-center mr-3">
+                                        <i class="fas fa-info-circle text-blue-500 text-xs"></i>
+                                    </div>
+                                    <span>支持格式</span>
+                                </button>
+                            </div>
+                            
+                            <!-- 特性标签 - 增强版 -->
+                            <div class="flex justify-center items-center space-x-4 pt-4 w-full">
+                                <div class="flex items-center text-sm text-gray-500 bg-white/50 px-3 py-2 rounded-full backdrop-blur-sm border border-green-200/50 hover:border-green-300 transition-all duration-300 hover:scale-105">
+                                    <i class="fas fa-shield-alt text-green-500 mr-2"></i>
+                                    <span>安全处理</span>
+                                </div>
+                                <div class="flex items-center text-sm text-gray-500 bg-white/50 px-3 py-2 rounded-full backdrop-blur-sm border border-yellow-200/50 hover:border-yellow-300 transition-all duration-300 hover:scale-105">
+                                    <i class="fas fa-bolt text-yellow-500 mr-2"></i>
+                                    <span>快速转录</span>
+                                </div>
+                                <div class="flex items-center text-sm text-gray-500 bg-white/50 px-3 py-2 rounded-full backdrop-blur-sm border border-purple-200/50 hover:border-purple-300 transition-all duration-300 hover:scale-105">
+                                    <i class="fas fa-brain text-purple-500 mr-2"></i>
+                                    <span>AI引擎</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 拖拽提示覆盖层 -->
+                        <div class="drag-overlay absolute inset-0 bg-blue-500 bg-opacity-90 flex items-center justify-center opacity-0 transition-opacity duration-300">
+                            <div class="text-center text-white">
+                                <i class="fas fa-download text-4xl mb-4 animate-bounce"></i>
+                                <p class="text-xl font-bold">释放以上传文件</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 音频播放器占位符 -->
+                <div id="audioPlayerSection" class="hidden">
+                    <!-- 播放器已移至页面底部 -->
+                </div>
+                
+                <!-- 转录结果显示区 -->
+                <div id="transcriptSection" class="hidden animate-fade-in-up" style="animation-delay: 0.4s;">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center space-x-3">
+                                <h3 class="text-lg font-semibold text-neutral-900">转录结果</h3>
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    <i class="fas fa-check-circle mr-1"></i> 自动转简体
+                                </span>
+                                <!-- 显示模式切换 -->
+                                <div class="flex items-center gap-2">
+                                    <label class="text-sm text-gray-600 font-medium">显示模式:</label>
+                                    <select id="displayModeSelect" onchange="changeDisplayMode()" class="text-sm border border-white/30 rounded-xl px-4 py-2.5 bg-white/20 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-white/50 transition-all duration-300 shadow-lg hover:bg-white/30 hover:border-white/40 font-medium">
+                                        <option value="continuous" selected>连续模式</option>
+                                        <option value="timestamp">时间戳模式</option>
+                                        <option value="plain">纯文本模式</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button id="editBtn" onclick="toggleEditMode()" class="inline-flex items-center px-4 py-2.5 border border-white/30 shadow-lg text-sm font-medium rounded-xl text-neutral-700 bg-white/20 backdrop-blur-md hover:bg-white/30 hover:border-white/40 transition-all duration-300 btn-click-feedback interactive-element transform hover:scale-105 hover:shadow-xl">
+                                    <i class="fas fa-edit mr-2 text-blue-600"></i> 编辑
+                                </button>
+                                <button id="saveBtn" onclick="saveEditedText()" class="hidden inline-flex items-center px-4 py-2.5 border border-green-300/40 shadow-lg text-sm font-medium rounded-xl text-green-700 bg-green-50/60 backdrop-blur-md hover:bg-green-100/70 hover:border-green-400/50 transition-all duration-300 btn-click-feedback interactive-element transform hover:scale-105 hover:shadow-xl">
+                                    <i class="fas fa-save mr-2 text-green-600"></i> 保存
+                                </button>
+                                <button id="cancelBtn" onclick="cancelEdit()" class="hidden inline-flex items-center px-4 py-2.5 border border-red-300/40 shadow-lg text-sm font-medium rounded-xl text-red-700 bg-red-50/60 backdrop-blur-md hover:bg-red-100/70 hover:border-red-400/50 transition-all duration-300 btn-click-feedback interactive-element transform hover:scale-105 hover:shadow-xl">
+                                    <i class="fas fa-times mr-2 text-red-600"></i> 取消
+                                </button>
+                                <button onclick="copyToClipboard()" class="inline-flex items-center px-4 py-2.5 border border-white/30 shadow-lg text-sm font-medium rounded-xl text-neutral-700 bg-white/20 backdrop-blur-md hover:bg-white/30 hover:border-white/40 transition-all duration-300 btn-click-feedback interactive-element transform hover:scale-105 hover:shadow-xl">
+                                    <i class="fas fa-copy mr-2 text-purple-600"></i> 复制
+                                </button>
+                                <button onclick="downloadResult()" class="inline-flex items-center px-4 py-2.5 border border-white/30 shadow-lg text-sm font-medium rounded-xl text-neutral-700 bg-white/20 backdrop-blur-md hover:bg-white/30 hover:border-white/40 transition-all duration-300 btn-click-feedback interactive-element transform hover:scale-105 hover:shadow-xl">
+                                    <i class="fas fa-download mr-2 text-indigo-600"></i> 下载
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- 转录文本 -->
+                        <div id="transcriptText" class="transcript-text text-neutral-800 leading-relaxed min-h-[120px]">
+                            <!-- 转录内容将在这里显示 -->
+                        </div>
+
+                        <!-- AI 智能总结区域（显示在转文本下方） -->
+                        <div id="aiSummarySection" class="hidden animate-fade-in-up" style="animation-delay: 0.5s;">
+                            <div class="relative bg-gradient-to-br from-white via-indigo-50/40 to-purple-50/30 backdrop-blur-xl rounded-xl border border-indigo-200/50 p-4 shadow-lg mt-3 hover:shadow-xl hover:border-indigo-300/60 transition-all duration-300 group overflow-hidden">
+                                <!-- 装饰性背景光效 -->
+                                <div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-indigo-200/20 to-transparent rounded-full blur-xl opacity-60 group-hover:opacity-80 transition-opacity duration-300"></div>
+                                <div class="absolute bottom-0 left-0 w-12 h-12 bg-gradient-to-tr from-purple-200/20 to-transparent rounded-full blur-lg opacity-40 group-hover:opacity-60 transition-opacity duration-300"></div>
+                                
+                                <div class="relative z-10">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <div class="flex items-center">
+                                            <div class="w-7 h-7 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-lg flex items-center justify-center mr-2.5 shadow-lg shadow-indigo-200/50 group-hover:shadow-indigo-300/60 transition-all duration-300">
+                                                <i class="fas fa-sparkles text-white text-xs animate-pulse"></i>
+                                            </div>
+                                            <div>
+                                                <h3 class="text-base font-semibold bg-gradient-to-r from-neutral-900 to-neutral-700 bg-clip-text text-transparent">AI 智能总结</h3>
+                                                <p class="text-xs text-neutral-500/80">基于转录内容生成的智能摘要</p>
+                                            </div>
+                                        </div>
+                                        <button id="regenSummaryBtn" onclick="generateAISummary()" class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-indigo-700 bg-gradient-to-r from-indigo-50 to-purple-50 hover:from-indigo-100 hover:to-purple-100 rounded-lg border border-indigo-200/60 hover:border-indigo-300/80 transition-all duration-200 hover:shadow-md shadow-sm group/btn">
+                                            <i class="fas fa-redo-alt mr-1.5 group-hover/btn:rotate-180 transition-transform duration-300"></i>
+                                            重新生成
+                                        </button>
+                                    </div>
+                                    <div id="aiSummaryContent" class="bg-gradient-to-br from-white/90 to-indigo-50/30 rounded-lg p-3.5 text-neutral-800 leading-relaxed whitespace-pre-wrap border border-white/60 min-h-[60px] shadow-inner backdrop-blur-sm text-sm relative overflow-hidden">
+                                        <!-- 内容区域装饰 -->
+                                        <div class="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-indigo-200/50 to-transparent"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                </div>
+                
+                <!-- 加载状态 -->
+                <div id="loadingSection" class="hidden animate-fade-in-up">
+                    <div class="bg-white/90 backdrop-blur-xl rounded-2xl border border-neutral-200/50 p-8 shadow-xl">
+                        <div class="flex flex-col items-center justify-center">
+                            <div class="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
+                            <p class="text-neutral-700 font-medium mb-2">正在处理音频文件...</p>
+                            <p id="estimatedTime" class="text-sm text-neutral-500 mb-2">正在计算预估时间...</p>
+                            <p id="progressText" class="text-xs text-neutral-400 mb-4">0% 完成</p>
+                            <div class="w-full max-w-md h-2 bg-neutral-200 rounded-full overflow-hidden">
+                                <div id="progressBar" class="h-full bg-primary rounded-full relative" style="width: 0%">
+                                    <div class="progress-shine"></div>
+                                </div>
+                            </div>
+                            <button onclick="cancelRequest()" class="mt-4 text-sm text-red-500 hover:text-red-600 transition-colors duration-200 flex items-center">
+                                <i class="fas fa-times mr-1"></i> 取消
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+
+        </div>
+        
+        <!-- 右侧控制面板 -->
+        <div class="w-[28rem] sidebar bg-white/95 backdrop-blur-xl border-l border-neutral-200/50 shadow-2xl animate-fade-in-up relative overflow-hidden transform-gpu" style="animation-delay: 1s;">
+            <!-- 装饰性背景 -->
+            <div class="absolute inset-0 bg-gradient-to-br from-blue-50/30 via-white/20 to-indigo-50/30 pointer-events-none"></div>
+            <div class="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-100/20 to-transparent rounded-full blur-3xl"></div>
+            <div class="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-purple-100/20 to-transparent rounded-full blur-2xl"></div>
+            <!-- 头部导航 -->
+            <div class="border-b border-neutral-200/30 bg-gradient-to-r from-white/95 to-neutral-50/90 backdrop-blur-xl relative z-10">
+                <div class="flex relative">
+                    <div class="w-full px-6 py-6 text-base font-semibold text-primary border-b-3 border-primary bg-gradient-to-b from-primary/8 to-primary/3 relative group">
+                        <div class="flex items-center justify-between relative z-10">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center mr-3 group-hover:from-primary/30 group-hover:to-primary/15 transition-all duration-300">
+                                    <i class="fas fa-cogs text-sm"></i>
+                                </div>
+                                <span class="tracking-wide flex items-center sidebar-title">转录设置</span>
+                            </div>
+                            <button id="sidebarToggle" onclick="toggleSidebar()" class="w-8 h-8 bg-white/20 backdrop-blur-md border border-white/30 rounded-lg flex items-center justify-center text-primary hover:bg-white/30 hover:border-white/40 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                                <i class="fas fa-chevron-right text-sm sidebar-arrow"></i>
+                            </button>
+                        </div>
+                        <div class="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 设置面板 -->
+            <div id="settingsPanel" class="p-8 relative z-10 h-full overflow-y-auto flex flex-col sidebar-content">
+                <!-- AI 工具容器（动态位置） -->
+                <div id="aiToolContainer" class="mb-6 order-last">
+                    <div class="bg-gradient-to-br from-indigo-50/80 to-purple-50/60 backdrop-blur-sm rounded-2xl p-6 border border-indigo-200/60 hover:border-indigo-300/80 hover:shadow-xl transition-all duration-300 group relative overflow-hidden outline outline-2 outline-indigo-400/60">
+                        <!-- 装饰性背景 -->
+                        <div class="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-indigo-200/30 to-transparent rounded-full blur-2xl"></div>
+                        <div class="absolute bottom-0 left-0 w-16 h-16 bg-gradient-to-tr from-purple-200/30 to-transparent rounded-full blur-xl"></div>
+                        
+                        <div class="flex items-center justify-between mb-4 relative z-10">
+                            <div class="flex items-center text-neutral-800 font-bold">
+                                <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center mr-3 shadow-lg">
+                                    <i class="fas fa-wand-magic-sparkles text-white text-sm"></i>
+                                </div>
+                                <div>
+                                    <span class="text-lg">AI 智能工具</span>
+                                    <p class="text-xs text-neutral-600 font-normal">基于OpenAI</p>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-sm text-neutral-700 mb-5 relative z-10">使用对标 <b>GPT-5</b> 的AI大模型，对转录文本进行智能分析和总结，提取关键信息。</p>
+                        <button id="aiSummaryBtn" onclick="generateAISummary()" class="relative z-10 w-full inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]">
+                            <i class="fas fa-sparkles mr-2.5 text-yellow-300"></i>
+                            <span>生成AI智能总结</span>
+                            <div class="absolute inset-0 bg-white/20 rounded-xl opacity-0 hover:opacity-100 transition-opacity duration-300"></div>
+                        </button>
+                    </div>
+                </div>
+                <!-- 模型设置 -->
+                <div class="mb-8">
+
+                    
+                    <div class="space-y-5">
+                        <div class="bg-gradient-to-br from-white/90 to-neutral-50/70 backdrop-blur-sm rounded-2xl p-6 border border-neutral-200/40 hover:border-blue-300/50 hover:shadow-lg transition-all duration-300 group outline outline-2 outline-blue-400/60">
+                            <label for="modelSelect" class="block text-sm font-semibold text-neutral-700 mb-4 flex items-center">
+                                <i class="fas fa-microchip text-blue-500 mr-2"></i>
+                                选择模型
+                            </label>
+                            <select id="modelSelect" class="block w-full rounded-xl border-neutral-200 bg-white/80 backdrop-blur-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:ring-opacity-50 py-3 px-4 text-sm font-medium transition-all duration-300 hover:border-blue-300">
+                                <option value="tiny" selected>Tiny-Fast（最快）</option>
+                                <option value="base">Base-Steady（平衡）</option>
+                                <option value="small">Small-Slow（高精度）</option>
+                                <option value="medium" disabled>Medium-ProMax</option>
+                                <option value="large" disabled>Large-ProMax (最准确)</option>
+                                <option value="turbo" disabled>Turbo-ProMax (最快)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="bg-gradient-to-br from-white/90 to-neutral-50/70 backdrop-blur-sm rounded-2xl p-6 border border-neutral-200/40 hover:border-emerald-300/50 hover:shadow-lg transition-all duration-300 group outline outline-2 outline-emerald-400/60">
+                            <label for="languageSelect" class="block text-sm font-semibold text-neutral-700 mb-4 flex items-center group-hover:text-emerald-600 transition-colors duration-300">
+                                <div class="w-6 h-6 bg-gradient-to-br from-emerald-100 to-emerald-50 rounded-lg flex items-center justify-center mr-3 group-hover:from-emerald-200 group-hover:to-emerald-100 transition-all duration-300">
+                                    <i class="fas fa-globe text-emerald-500 text-xs"></i>
+                                </div>
+                                语言选择
+                            </label>
+                            <select id="languageSelect" class="block w-full rounded-xl border-neutral-200/60 bg-white/90 backdrop-blur-sm shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:ring-opacity-50 py-3.5 px-4 text-sm font-medium transition-all duration-300 hover:border-emerald-300 hover:shadow-md">
+                                <option value="">自动检测</option>
+                                <option value="zh">中文</option>
+                                <option value="en">英文</option>
+                                <option value="ja">日文</option>
+                                <option value="ko">韩文</option>
+                                <option value="fr">法文</option>
+                                <option value="de">德文</option>
+                                <option value="es">西班牙文</option>
+                            </select>
+                        </div>
+                        
+                        <div class="bg-gradient-to-br from-white/90 to-neutral-50/70 backdrop-blur-sm rounded-2xl p-6 border border-neutral-200/40 hover:border-purple-300/50 hover:shadow-lg transition-all duration-300 group transform-gpu outline outline-2 outline-purple-400/60">
+                            <label for="taskSelect" class="block text-sm font-semibold text-neutral-700 mb-4 flex items-center group-hover:text-purple-600 transition-colors duration-300">
+                                <div class="w-6 h-6 bg-gradient-to-br from-purple-100 to-purple-50 rounded-lg flex items-center justify-center mr-3 group-hover:from-purple-200 group-hover:to-purple-100 transition-all duration-300">
+                                    <i class="fas fa-tasks text-purple-500 text-xs"></i>
+                                </div>
+                                任务类型
+                            </label>
+                            <select id="taskSelect" class="block w-full rounded-xl border-neutral-200/60 bg-white/90 backdrop-blur-sm shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:ring-opacity-50 py-3.5 px-4 text-sm font-medium transition-all duration-300 hover:border-purple-300 hover:shadow-md">
+                                <option value="transcribe">转录 (保持原语言)</option>
+                                <option value="translate">翻译为英文</option>
+                            </select>
+                        </div>
+                        
+                        <div class="bg-gradient-to-br from-orange-50/80 to-amber-50/60 backdrop-blur-sm rounded-2xl p-5 border border-orange-200/50 hover:border-orange-300/60 transition-all duration-300 transform-gpu outline outline-2 outline-orange-400/60">
+                            <div class="flex items-center justify-between">
+                                <div class="flex flex-col">
+                                    <label class="inline-flex items-center text-sm font-semibold text-neutral-700 cursor-pointer group">
+                                        <input type="checkbox" id="wordTimestamps" checked class="relative appearance-none h-6 w-6 border-2 border-orange-300 rounded-xl bg-white/80 backdrop-blur-sm checked:bg-gradient-to-br checked:from-orange-500 checked:to-amber-500 checked:border-orange-500 focus:ring-orange-500 focus:ring-2 focus:ring-offset-1 transition-all duration-300 hover:border-orange-400 hover:shadow-lg cursor-pointer before:content-['✓'] before:absolute before:top-0 before:left-1 before:text-white before:text-sm before:font-bold before:opacity-0 checked:before:opacity-100 before:transition-opacity before:duration-300">
+                                        <span class="ml-3 group-hover:text-orange-600 transition-colors duration-300">启用词级时间戳</span>
+                                    </label>
+                                    <p class="text-xs text-neutral-500 mt-2 ml-9">为每个词语添加精确的时间标记</p>
+                                </div>
+                                <div class="text-orange-500">
+                                    <i class="fas fa-clock text-xl"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 高级设置 -->
+                        <div>
+                            <button type="button" id="toggleAdvanced" class="flex items-center text-sm text-primary hover:text-primary/80 transition-colors duration-200 font-medium">
+                                <i class="fas fa-cogs mr-2"></i> 高级设置
+                                <i class="fas fa-chevron-down ml-2 transition-transform duration-200"></i>
+                            </button>
+                            
+                            <div id="advancedSettings" class="mt-4 hidden">
+                                <div class="bg-gradient-to-br from-red-50/80 to-pink-50/60 backdrop-blur-sm rounded-2xl p-5 border border-red-200/50 outline outline-2 outline-red-400/60">
+                                    <div class="mb-4">
+                                        <div class="flex justify-between mb-3">
+                                            <label for="temperature" class="text-sm font-medium text-neutral-700 flex items-center">
+                                                <i class="fas fa-thermometer-half text-red-500 mr-2"></i>
+                                                温度
+                                            </label>
+                                            <span class="text-sm text-red-500 font-bold bg-red-100 px-2 py-1 rounded-lg" id="tempValue">0.1</span>
+                                        </div>
+                                        <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.1" oninput="updateTempValue(this.value)" class="w-full h-3 bg-gradient-to-r from-red-200 to-pink-200 rounded-xl appearance-none cursor-pointer hover:from-red-300 hover:to-pink-300 transition-all duration-300">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 操作按钮 -->
+                    <div class="mt-8 space-y-4">
+                        <button id="transcribeBtn" onclick="transcribeAudio()" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-4 px-6 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 hover:scale-[1.02] relative overflow-hidden group btn-click-feedback interactive-element">
+                            <div class="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                            <div class="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center mr-3 relative z-10">
+                                <i class="fas fa-microphone text-sm"></i>
+                            </div>
+                            <span class="relative z-10 tracking-wide">开始转录</span>
+                        </button>
+                        <button onclick="reuploadFile()" class="w-full bg-gradient-to-r from-blue-50/90 to-indigo-50/80 hover:from-blue-100/90 hover:to-indigo-100/80 border border-blue-200/60 hover:border-blue-300/70 text-blue-700 font-semibold py-4 px-6 rounded-2xl flex items-center justify-center transition-all duration-300 hover:shadow-md transform hover:-translate-y-0.5 backdrop-blur-sm group">
+                            <div class="w-8 h-8 bg-blue-100/80 rounded-lg flex items-center justify-center mr-3 group-hover:bg-blue-200/80 transition-all duration-300">
+                                <i class="fas fa-upload text-sm"></i>
+                            </div>
+                            <span class="tracking-wide">重新上传</span>
+                        </button>
+                    </div>
+                </div>
+                
+
+                
+                <!-- 转录信息 -->
+                <div id="transcriptInfo" class="hidden p-4 relative z-10">
+                    <div class="bg-gradient-to-br from-white/95 to-neutral-50/80 backdrop-blur-xl rounded-xl p-4 border border-neutral-200/40 shadow-md hover:shadow-lg transition-all duration-300 outline outline-2 outline-blue-400/60">
+                        <div class="flex items-center mb-4">
+                            <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center mr-3 shadow-md">
+                                <i class="fas fa-info-circle text-white text-sm"></i>
+                            </div>
+                            <h3 class="text-lg font-semibold text-neutral-900 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">转录信息</h3>
+                        </div>
+                        <div class="bg-gradient-to-br from-neutral-50/50 to-white/80 rounded-lg p-3 border border-neutral-200/30">
+                            <!-- 2x2 网格布局 -->
+                            <div class="grid grid-cols-2 gap-3">
+                                <!-- 第一行：文件名 | 语言 -->
+                                <div class="flex flex-col space-y-1 hover:bg-neutral-50/50 rounded-md p-2 transition-all duration-200">
+                                    <span class="text-neutral-600 text-xs flex items-center">
+                                        <div class="w-4 h-4 bg-blue-100/60 rounded-sm flex items-center justify-center mr-1.5">
+                                            <i class="fas fa-file-audio text-blue-500 text-xs"></i>
+                                        </div>
+                                        文件名
+                                    </span>
+                                    <span id="infoFileName" class="font-medium text-neutral-900 text-sm truncate bg-neutral-100/50 px-2 py-1 rounded" title="">-</span>
+                                </div>
+                                <div class="flex flex-col space-y-1 hover:bg-neutral-50/50 rounded-md p-2 transition-all duration-200">
+                                    <span class="text-neutral-600 text-xs flex items-center">
+                                        <div class="w-4 h-4 bg-purple-100/60 rounded-sm flex items-center justify-center mr-1.5">
+                                            <i class="fas fa-globe text-purple-500 text-xs"></i>
+                                        </div>
+                                        语言
+                                    </span>
+                                    <span id="infoLanguage" class="font-medium text-neutral-900 text-sm bg-neutral-100/50 px-2 py-1 rounded">-</span>
+                                </div>
+                                <!-- 第二行：模型 | 时间 -->
+                                <div class="flex flex-col space-y-1 hover:bg-neutral-50/50 rounded-md p-2 transition-all duration-200">
+                                    <span class="text-neutral-600 text-xs flex items-center">
+                                        <div class="w-4 h-4 bg-green-100/60 rounded-sm flex items-center justify-center mr-1.5">
+                                            <i class="fas fa-microchip text-green-500 text-xs"></i>
+                                        </div>
+                                        模型
+                                    </span>
+                                    <span id="infoModel" class="font-medium text-neutral-900 text-sm bg-neutral-100/50 px-2 py-1 rounded">-</span>
+                                </div>
+                                <div class="flex flex-col space-y-1 hover:bg-neutral-50/50 rounded-md p-2 transition-all duration-200">
+                                    <span class="text-neutral-600 text-xs flex items-center">
+                                        <div class="w-4 h-4 bg-orange-100/60 rounded-sm flex items-center justify-center mr-1.5">
+                                            <i class="fas fa-clock text-orange-500 text-xs"></i>
+                                        </div>
+                                        时间
+                                    </span>
+                                    <span id="infoTime" class="font-medium text-neutral-900 text-sm bg-neutral-100/50 px-2 py-1 rounded">-</span>
+                                </div>
+                            </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 状态消息 -->
+    <div id="statusMessage" class="fixed bottom-4 right-4 z-50 hidden">
+        <div id="statusContent" class="inline-flex items-center px-5 py-3 rounded-xl shadow-2xl bg-gradient-to-r from-white/95 to-neutral-50/95 backdrop-blur-lg border border-neutral-200/50 transition-all duration-300 hover:shadow-xl">
+            <div class="w-5 h-5 bg-blue-100/60 rounded-lg flex items-center justify-center mr-3">
+                <i class="fas fa-info-circle text-blue-500 text-xs"></i>
+            </div>
+            <span id="statusText" class="font-medium text-neutral-800"></span>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let selectedFile = null;
+        let currentRequest = null;
+        let startTime = null;
+        let retryCount = 0;
+        let audioElement = null;
+        let transcriptData = null;
+        let currentSegmentIndex = -1;
+        let currentPlayingSegment = null; // 当前播放的段落信息
+        let isTimestampModeAutoPlay = false; // 是否为时间戳模式自动播放
+        const MAX_RETRIES = 3;
+        
+        // DOM 元素
+        const fileDropZone = document.getElementById('fileDropZone');
+        const audioPlayerSection = document.getElementById('audioPlayerSection');
+        const uploadArea = document.getElementById('uploadArea');
+        const transcriptSection = document.getElementById('transcriptSection');
+        const loadingSection = document.getElementById('loadingSection');
+        const toggleAdvanced = document.getElementById('toggleAdvanced');
+        const advancedSettings = document.getElementById('advancedSettings');
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initDragAndDrop();
+            initToggleAdvanced();
+            loadUserSettings();
+            audioElement = document.getElementById('audioElement');
+            setupAudioEvents();
+            
+            // 监听窗口大小变化，动态调整音频播放器宽度
+            window.addEventListener('resize', adjustAudioPlayerWidth);
+            
+            // 初始调整音频播放器宽度
+            adjustAudioPlayerWidth();
+        });
+        
+        // 设置音频事件监听
+        function setupAudioEvents() {
+            audioElement.addEventListener('loadedmetadata', function() {
+                const duration = formatTime(audioElement.duration);
+                document.getElementById('totalTimeDisplay').textContent = duration;
+                document.getElementById('totalTime').textContent = duration;
+            });
+            
+            audioElement.addEventListener('timeupdate', function() {
+                const current = formatTime(audioElement.currentTime);
+                const progress = (audioElement.currentTime / audioElement.duration) * 100;
+                
+                document.getElementById('currentTimeDisplay').textContent = current;
+                document.getElementById('currentTime').textContent = current;
+                document.getElementById('progressIndicator').style.width = progress + '%';
+                
+                // 高亮当前播放的文本段
+                highlightCurrentSegment(audioElement.currentTime);
+                
+                // 时间戳模式自动暂停逻辑
+                if (isTimestampModeAutoPlay && currentPlayingSegment && audioElement.currentTime >= currentPlayingSegment.end) {
+                    audioElement.pause();
+                    document.getElementById('playPauseBtn').innerHTML = '<i class="fas fa-play text-lg"></i>';
+                    isTimestampModeAutoPlay = false;
+                    currentPlayingSegment = null;
+                    
+                    // 移除播放状态样式
+                    document.querySelectorAll('.segment-row').forEach(row => row.classList.remove('playing'));
+                }
+            });
+            
+            audioElement.addEventListener('ended', function() {
+                document.getElementById('playPauseBtn').innerHTML = '<i class="fas fa-play text-lg"></i>';
+            });
+        }
+        
+        // 拖拽上传功能
+        function initDragAndDrop() {
+            fileDropZone.addEventListener('dragenter', function(e) {
+                e.preventDefault();
+                this.classList.add('drag-over');
+            });
+            
+            fileDropZone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('drag-over');
+            });
+            
+            fileDropZone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                // 只有当离开整个拖拽区域时才移除样式
+                if (!this.contains(e.relatedTarget)) {
+                    this.classList.remove('drag-over');
+                }
+            });
+            
+            fileDropZone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('drag-over');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileSelect({ target: { files: files } });
+                }
+            });
+        }
+        
+        // 显示支持格式信息
+        function showSupportedFormats() {
+            const formatInfo = `
+                <div class="space-y-4">
+                    <h4 class="font-bold text-lg text-gray-800">支持的音频格式：</h4>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div class="flex items-center"><i class="fas fa-music text-blue-500 mr-2"></i>WAV</div>
+                        <div class="flex items-center"><i class="fas fa-music text-blue-500 mr-2"></i>MP3</div>
+                        <div class="flex items-center"><i class="fas fa-music text-blue-500 mr-2"></i>FLAC</div>
+                        <div class="flex items-center"><i class="fas fa-music text-blue-500 mr-2"></i>M4A</div>
+                        <div class="flex items-center"><i class="fas fa-music text-blue-500 mr-2"></i>AAC</div>
+                        <div class="flex items-center"><i class="fas fa-music text-blue-500 mr-2"></i>OGG</div>
+                    </div>
+                    
+                    <h4 class="font-bold text-lg text-gray-800 pt-2">支持的视频格式：</h4>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div class="flex items-center"><i class="fas fa-video text-indigo-500 mr-2"></i>MP4</div>
+                        <div class="flex items-center"><i class="fas fa-video text-indigo-500 mr-2"></i>AVI</div>
+                        <div class="flex items-center"><i class="fas fa-video text-indigo-500 mr-2"></i>MOV</div>
+                        <div class="flex items-center"><i class="fas fa-video text-indigo-500 mr-2"></i>MKV</div>
+                        <div class="flex items-center"><i class="fas fa-video text-indigo-500 mr-2"></i>WMV</div>
+                        <div class="flex items-center"><i class="fas fa-video text-indigo-500 mr-2"></i>FLV</div>
+                    </div>
+                    
+                    <div class="bg-blue-50 p-3 rounded-lg mt-4">
+                        <p class="text-sm text-blue-800">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            最大文件大小：<strong>100MB</strong><br>
+                            推荐使用：<strong>WAV、MP3、MP4</strong> 格式以获得最佳转录效果
+                        </p>
+                    </div>
+                </div>
+            `;
+            
+            showModal('支持的文件格式', formatInfo);
+        }
+        
+        // 显示模态框
+        function showModal(title, content) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 transform transition-all duration-300 scale-95 opacity-0">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-gray-800">${title}</h3>
+                        <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    <div class="text-gray-600">${content}</div>
+                    <div class="mt-6 flex justify-end">
+                        <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                            确定
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // 动画效果
+            setTimeout(() => {
+                const modalContent = modal.querySelector('.bg-white');
+                modalContent.classList.remove('scale-95', 'opacity-0');
+                modalContent.classList.add('scale-100', 'opacity-100');
+            }, 10);
+            
+            // 点击背景关闭
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+        }
+        
+        // 处理文件选择
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                // 验证文件类型
+                const allowedTypes = [
+                    'audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/flac', 'audio/m4a', 
+                    'audio/aac', 'audio/ogg', 'video/mp4', 'video/avi', 'video/mov', 
+                    'video/mkv', 'video/wmv', 'video/flv', 'video/webm', 'video/m4v'
+                ];
+                
+                if (!allowedTypes.includes(file.type) && !file.name.match(/\.(wav|mp3|flac|m4a|aac|ogg|mp4|avi|mov|mkv|wmv|flv|webm|m4v)$/i)) {
+                    showStatus('不支持的文件格式，请选择音频或视频文件', 'error');
+                    return;
+                }
+                
+                // 验证文件大小 (限制为100MB)
+                const maxSize = 100 * 1024 * 1024;
+                if (file.size > maxSize) {
+                    showStatus(`文件大小不能超过 ${formatFileSize(maxSize)}`, 'error');
+                    return;
+                }
+                
+                selectedFile = file;
+                setupAudioPlayer(file);
+                showTranscribeModal(file); // 显示转录弹窗
+                showStatus('', '');
+            }
+        }
+        
+        // 显示转录弹窗
+        function showTranscribeModal(file) {
+            const modal = document.createElement('div');
+            modal.id = 'transcribeModal';
+            modal.className = 'fixed top-32 left-1/4 z-40 pointer-events-none';
+            modal.innerHTML = `
+                <div class="bg-white rounded-2xl p-10 max-w-lg w-96 transform transition-all duration-300 scale-95 opacity-0 shadow-2xl border border-gray-200 pointer-events-auto">
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fas fa-file-audio text-white text-lg"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-2">文件上传成功</h3>
+                        <p class="text-gray-600 text-sm mb-1">${file.name}</p>
+                        <p class="text-gray-500 text-xs mb-4">${formatFileSize(file.size)}</p>
+                        
+                        <div class="space-y-2">
+                            <button onclick="startTranscription()" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm">
+                                <i class="fas fa-play mr-2"></i>
+                                开始转录
+                            </button>
+                            <button onclick="reuploadFromModal()" class="w-full bg-gradient-to-r from-sky-100 to-sky-50 hover:from-sky-200 hover:to-sky-100 border border-sky-200 hover:border-sky-300 text-sky-700 font-semibold py-2.5 px-4 rounded-lg transition-all duration-300 text-sm">
+                                <i class="fas fa-upload mr-2"></i>
+                                重新上传
+                            </button>
+                        </div>
+                    </div>
+                    <button onclick="closeTranscribeModal()" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600 transition-colors p-1">
+                        <i class="fas fa-times text-sm"></i>
+                    </button>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // 动画效果
+            setTimeout(() => {
+                const modalContent = modal.querySelector('.bg-white');
+                modalContent.classList.remove('scale-95', 'opacity-0');
+                modalContent.classList.add('scale-100', 'opacity-100');
+            }, 10);
+            
+            // 弹窗持续显示，不自动消失
+        }
+        
+        // 关闭转录弹窗
+        function closeTranscribeModal() {
+            const modal = document.getElementById('transcribeModal');
+            if (modal) {
+                const modalContent = modal.querySelector('.bg-white');
+                modalContent.classList.add('scale-95', 'opacity-0');
+                modalContent.classList.remove('scale-100', 'opacity-100');
+                setTimeout(() => {
+                    modal.remove();
+                }, 300);
+            }
+        }
+        
+        // 开始转录
+        function startTranscription() {
+            closeTranscribeModal();
+            transcribeAudio();
+        }
+        
+        // 动态调整音频播放器宽度
+        function adjustAudioPlayerWidth() {
+            const sidebar = document.querySelector('.sidebar');
+            const audioPlayer = document.getElementById('fixedAudioPlayer');
+            
+            if (sidebar && audioPlayer) {
+                // 检查是否为移动端
+                if (window.innerWidth <= 768) {
+                    // 移动端由CSS媒体查询处理，不需要JavaScript干预
+                    audioPlayer.style.right = '';
+                    return;
+                }
+                
+                const sidebarWidth = sidebar.classList.contains('collapsed') ? 64 : sidebar.offsetWidth; // 64px = 4rem
+                const padding = 0; // 完全消除缝隙，音频条紧贴右侧菜单
+                const rightMargin = sidebarWidth + padding;
+                
+                audioPlayer.style.right = rightMargin + 'px';
+            }
+        }
+        
+        // 切换侧边栏收缩状态
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            
+            if (isCollapsed) {
+                sidebar.classList.remove('collapsed');
+            } else {
+                sidebar.classList.add('collapsed');
+            }
+            
+            // 延迟调整音频播放器宽度，等待动画完成
+            setTimeout(() => {
+                adjustAudioPlayerWidth();
+            }, 200);
+        }
+        
+        // 设置音频播放器
+        function setupAudioPlayer(file) {
+            const url = URL.createObjectURL(file);
+            audioElement.src = url;
+            
+            document.getElementById('audioFileName').textContent = file.name;
+            document.getElementById('audioFileSize').textContent = formatFileSize(file.size);
+            
+            uploadArea.classList.add('hidden');
+            document.getElementById('fixedAudioPlayer').classList.remove('hidden');
+            
+            // 动态调整音频播放器宽度
+            adjustAudioPlayerWidth();
+        }
+        
+        // 移除文件
+        function removeFile() {
+            selectedFile = null;
+            document.getElementById('audioFile').value = '';
+            audioElement.src = '';
+            
+            uploadArea.classList.remove('hidden');
+            document.getElementById('fixedAudioPlayer').classList.add('hidden');
+            transcriptSection.classList.add('hidden');
+            document.getElementById('transcriptInfo').classList.add('hidden');
+            
+            showStatus('', '');
+        }
+        
+        // 播放/暂停控制
+        function togglePlayPause() {
+            const btn = document.getElementById('playPauseBtn');
+            if (audioElement.paused) {
+                audioElement.play();
+                btn.innerHTML = '<i class="fas fa-pause text-lg"></i>';
+            } else {
+                audioElement.pause();
+                btn.innerHTML = '<i class="fas fa-play text-lg"></i>';
+                // 手动暂停时清除自动播放模式
+                isTimestampModeAutoPlay = false;
+                currentPlayingSegment = null;
+            }
+        }
+        
+        // 快退
+        function seekBackward() {
+            audioElement.currentTime = Math.max(0, audioElement.currentTime - 10);
+            // 手动操作时清除自动播放模式
+            isTimestampModeAutoPlay = false;
+            currentPlayingSegment = null;
+        }
+        
+        // 快进
+        function seekForward() {
+            audioElement.currentTime = Math.min(audioElement.duration, audioElement.currentTime + 10);
+            // 手动操作时清除自动播放模式
+            isTimestampModeAutoPlay = false;
+            currentPlayingSegment = null;
+        }
+        
+        // 跳转到指定位置
+        function seekToPosition(event) {
+            const rect = event.target.getBoundingClientRect();
+            const percent = (event.clientX - rect.left) / rect.width;
+            audioElement.currentTime = percent * audioElement.duration;
+            // 手动操作时清除自动播放模式
+            isTimestampModeAutoPlay = false;
+            currentPlayingSegment = null;
+        }
+        
+        // 跳转到指定时间
+        function seekToTime(time, segmentInfo = null) {
+            audioElement.currentTime = time;
+            
+            // 如果提供了段落信息，设置自动播放模式
+            if (segmentInfo) {
+                currentPlayingSegment = segmentInfo;
+                isTimestampModeAutoPlay = true;
+            } else {
+                currentPlayingSegment = null;
+                isTimestampModeAutoPlay = false;
+            }
+            
+            if (audioElement.paused) {
+                audioElement.play();
+                document.getElementById('playPauseBtn').innerHTML = '<i class="fas fa-pause text-lg"></i>';
+            }
+        }
+        
+        // 高亮当前播放的文本段
+        function highlightCurrentSegment(currentTime) {
+            if (!transcriptData || !transcriptData.segments) return;
+            
+            const segments = document.querySelectorAll('.transcript-segment');
+            let newIndex = -1;
+            
+            for (let i = 0; i < transcriptData.segments.length; i++) {
+                const segment = transcriptData.segments[i];
+                if (currentTime >= segment.start && currentTime <= segment.end) {
+                    newIndex = i;
+                    break;
+                }
+            }
+            
+            if (newIndex !== currentSegmentIndex) {
+                // 移除之前的高亮
+                segments.forEach(seg => seg.classList.remove('active'));
+                
+                // 添加新的高亮
+                if (newIndex >= 0 && segments[newIndex]) {
+                    segments[newIndex].classList.add('active');
+                    // 滚动到当前段落
+                    segments[newIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                
+                currentSegmentIndex = newIndex;
+            }
+        }
+        
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // 格式化时间
+        function formatTime(seconds, showMilliseconds = false) {
+            if (isNaN(seconds)) return '00:00';
+            
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            const milliseconds = Math.floor((seconds % 1) * 1000);
+            
+            if (showMilliseconds) {
+                if (hours > 0) {
+                    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+                }
+                return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+            }
+            
+            if (hours > 0) {
+                return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+            return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        // 格式化时间范围显示
+        function formatTimeRange(startSeconds, endSeconds, compact = false) {
+            const start = formatTime(startSeconds);
+            const end = formatTime(endSeconds);
+            const duration = Math.round(endSeconds - startSeconds);
+            
+            if (compact) {
+                return `${start} (${duration}s)`;
+            }
+            return `${start} - ${end}`;
+        }
+        
+        // 高级设置切换
+        function initToggleAdvanced() {
+            toggleAdvanced.addEventListener('click', function() {
+                advancedSettings.classList.toggle('hidden');
+                const icon = this.querySelector('.fa-chevron-down');
+                icon.style.transform = advancedSettings.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+            });
+        }
+        
+        // 更新温度值
+        function updateTempValue(value) {
+            document.getElementById('tempValue').textContent = value;
+        }
+        
+        // 开始转录
+        async function transcribeAudio() {
+            // 关闭转录弹窗（如果存在）
+            if (document.getElementById('transcribeModal')) {
+                closeTranscribeModal();
+            }
+            
+            if (!selectedFile) {
+                showStatus('请先选择音频文件', 'error');
+                return;
+            }
+            
+            const model = document.getElementById('modelSelect').value;
+            const language = document.getElementById('languageSelect').value || null;
+            const task = document.getElementById('taskSelect').value;
+            const temperature = parseFloat(document.getElementById('temperature').value);
+            const wordTimestamps = document.getElementById('wordTimestamps').checked;
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('model', model);
+            formData.append('language', language || '');
+            formData.append('task', task);
+            formData.append('temperature', temperature);
+            formData.append('word_timestamps', wordTimestamps);
+            
+            showLoading(true);
+            showStatus('', '');
+            updateProgress(0);
+            startTime = Date.now();
+            
+            // 获取音频时长并计算预估处理时间
+            try {
+                const audioDuration = await getAudioDuration(selectedFile);
+                if (audioDuration) {
+                    const estimatedProcessingTime = calculateEstimatedTime(audioDuration, model);
+                    const estimatedTimeElement = document.getElementById('estimatedTime');
+                    if (estimatedTimeElement) {
+                        estimatedTimeElement.textContent = `音频时长: ${formatDuration(Math.ceil(audioDuration))} · 预计处理时间: ${formatDuration(estimatedProcessingTime)}`;
+                    }
+                    
+                    // 存储预估时间用于进度计算
+                    window.estimatedProcessingTime = estimatedProcessingTime;
+                    
+                    // 立即开始智能进度条
+                    startSmartProgress();
+                } else {
+                    const estimatedTimeElement = document.getElementById('estimatedTime');
+                    if (estimatedTimeElement) {
+                        estimatedTimeElement.textContent = '无法获取音频时长，正在处理中...';
+                    }
+                    window.estimatedProcessingTime = null;
+                    
+                    // 即使没有预估时间也启动进度条
+                    startSmartProgress();
+                }
+            } catch (error) {
+                console.log('获取音频时长失败:', error);
+                const estimatedTimeElement = document.getElementById('estimatedTime');
+                if (estimatedTimeElement) {
+                    estimatedTimeElement.textContent = '正在处理音频文件...';
+                }
+                window.estimatedProcessingTime = null;
+                
+                // 即使获取时长失败也启动进度条
+                startSmartProgress();
+            }
+            
+            try {
+                if (retryCount === 0) {
+                    const source = axios.CancelToken.source();
+                    currentRequest = source;
+                }
+                
+                const response = await axios.post('http://113.44.130.103:8080/api/transcribe', formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                    timeout: 300000,
+                    cancelToken: currentRequest ? currentRequest.token : undefined,
+                    onUploadProgress: (progressEvent) => {
+                        if (progressEvent.lengthComputable) {
+                            const percentComplete = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                            // 上传进度不显示，因为通常很快
+                        }
+                    }
+                });
+                
+                stopSmartProgress();
+                updateProgress(100);
+                displayResult(response.data);
+                showStatus('转录成功！', 'success');
+                
+            } catch (error) {
+                console.error('转录失败:', error);
+                let errorMessage = '转录失败';
+                let shouldRetry = false;
+                
+                if (axios.isCancel(error)) {
+                    return;
+                } else if (error.response) {
+                    errorMessage = error.response.data.detail || errorMessage;
+                    if (error.response.status === 413) {
+                        errorMessage = '文件太大，请选择较小的文件';
+                    } else if (error.response.status === 415) {
+                        errorMessage = '不支持的音频格式';
+                    } else if (error.response.status >= 500) {
+                        errorMessage = `服务器错误 (${error.response.status})`;
+                        shouldRetry = true;
+                    }
+                } else if (error.request) {
+                    errorMessage = '网络请求失败，请检查服务器状态和网络连接';
+                    shouldRetry = true;
+                } else if (error.code === 'ECONNABORTED') {
+                    errorMessage = '请求超时，请尝试使用较小的文件或检查网络连接';
+                    shouldRetry = true;
+                } else if (error.message && error.message.includes('Network Error')) {
+                    errorMessage = '网络错误，请检查网络连接';
+                    shouldRetry = true;
+                }
+                
+                if (shouldRetry && retryCount < MAX_RETRIES) {
+                    retryCount++;
+                    showStatus(`${errorMessage}，正在重试 (${retryCount}/${MAX_RETRIES})...`, 'error');
+                    setTimeout(transcribeAudio, 1000 * retryCount);
+                    return;
+                }
+                
+                showStatus(errorMessage, 'error');
+                retryCount = 0;
+            } finally {
+                if (retryCount === 0) {
+                    stopSmartProgress();
+                    showLoading(false);
+                    currentRequest = null;
+                    updateProgress(0);
+                }
+            }
+        }
+        
+        // 显示结果
+        function displayResult(data) {
+            transcriptData = data;
+            const endTime = Date.now();
+            const processingTime = Math.round((endTime - startTime) / 1000);
+            
+            // 自动转换为简体中文
+            if (transcriptData.text) {
+                transcriptData.text = convertToSimplified(transcriptData.text);
+            }
+            if (transcriptData.segments && transcriptData.segments.length > 0) {
+                transcriptData.segments.forEach(segment => {
+                    if (segment.text) {
+                        segment.text = convertToSimplified(segment.text);
+                    }
+                });
+            }
+            
+            // 更新转录信息
+            const fileNameElement = document.getElementById('infoFileName');
+            fileNameElement.textContent = selectedFile.name;
+            fileNameElement.title = selectedFile.name; // 添加title属性以显示完整文件名
+            document.getElementById('infoModel').textContent = document.getElementById('modelSelect').value;
+            document.getElementById('infoLanguage').textContent = data.language || '自动检测';
+            document.getElementById('infoTime').textContent = formatDuration(processingTime);
+            
+            // 显示转录文本
+            displayTranscriptResult(data);
+            
+            // 显示相关区域
+            loadingSection.classList.add('hidden');
+            transcriptSection.classList.remove('hidden');
+            
+            // 转录完成后，将AI工具移动到设置面板顶部
+            moveAIToolToTop();
+            
+            // 将转录信息移动到AI工具下面
+            moveTranscriptInfoToAITool();
+            
+            retryCount = 0;
+        }
+        
+
+        
+        // 显示加载状态
+        function showLoading(show) {
+            if (show) {
+                transcriptSection.classList.add('hidden');
+                loadingSection.classList.remove('hidden');
+                
+                // 重置进度文本
+                const estimatedTimeElement = document.getElementById('estimatedTime');
+                const progressTextElement = document.getElementById('progressText');
+                if (estimatedTimeElement) {
+                    estimatedTimeElement.textContent = '正在计算预估时间...';
+                }
+                if (progressTextElement) {
+                    progressTextElement.textContent = '0% 完成';
+                }
+            } else {
+                loadingSection.classList.add('hidden');
+            }
+            document.getElementById('transcribeBtn').disabled = show;
+        }
+        
+        // 获取音频文件时长
+        function getAudioDuration(file) {
+            return new Promise((resolve) => {
+                const audio = new Audio();
+                audio.addEventListener('loadedmetadata', () => {
+                    resolve(audio.duration);
+                });
+                audio.addEventListener('error', () => {
+                    resolve(null); // 如果无法获取时长，返回null
+                });
+                audio.src = URL.createObjectURL(file);
+            });
+        }
+        
+        // 根据模型计算预估处理时间
+        function calculateEstimatedTime(duration, model) {
+            const processingRates = {
+                'tiny': 0.3,    // 每秒音频需要0.3秒处理
+                'base': 0.5,    // 每秒音频需要0.5秒处理
+                'small': 1.9    // 每秒音频需要1.9秒处理
+            };
+            
+            const rate = processingRates[model] || 1.0; // 默认1秒处理1秒音频
+            return Math.ceil(duration * rate); // 向上取整
+        }
+        
+        // 格式化时长显示（中文 分/秒）
+        function formatDuration(seconds) {
+            if (isNaN(seconds)) return '0秒';
+            seconds = Math.floor(Number(seconds));
+            if (seconds < 60) {
+                return `${seconds}秒`;
+            } else {
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                return remainingSeconds > 0 ? `${minutes}分${remainingSeconds}秒` : `${minutes}分钟`;
+            }
+        }
+        
+        // 更新进度条和进度文本
+        function updateProgress(percent, estimatedTime = null, elapsedTime = null) {
+            document.getElementById('progressBar').style.width = percent + '%';
+            
+            const progressText = document.getElementById('progressText');
+            if (progressText) {
+                let text = `${Math.round(percent)}% 完成`;
+                
+                if (estimatedTime && elapsedTime !== null) {
+                    const remainingTime = Math.max(0, estimatedTime - elapsedTime);
+                    if (remainingTime > 0) {
+                        text += ` · 预计还需 ${formatDuration(remainingTime)}`;
+                    }
+                }
+                
+                progressText.textContent = text;
+            }
+        }
+        
+        // 智能进度条
+        let progressTimer = null;
+        
+        function startSmartProgress() {
+            if (progressTimer) {
+                clearInterval(progressTimer);
+            }
+            
+            const processingStartTime = Date.now();
+            
+            progressTimer = setInterval(() => {
+                const elapsedMs = Date.now() - processingStartTime;
+                const elapsedSeconds = Math.floor(elapsedMs / 1000);
+                const estimatedTime = window.estimatedProcessingTime;
+                
+                if (estimatedTime && estimatedTime > 0) {
+                    // 基于时间的进度计算，从0%到95%
+                    const progressRatio = elapsedSeconds / estimatedTime;
+                    let timeBasedProgress = progressRatio * 95;
+                    
+                    // 限制进度不超过95%，最后5%留给服务器响应完成
+                    timeBasedProgress = Math.min(95, timeBasedProgress);
+                    
+                    // 确保进度至少为0
+                    timeBasedProgress = Math.max(0, timeBasedProgress);
+                    
+                    updateProgress(timeBasedProgress, estimatedTime, elapsedSeconds);
+                } else {
+                    // 如果没有预估时间，使用简单的递增进度
+                    const simpleProgress = Math.min(95, elapsedSeconds * 3);
+                    updateProgress(simpleProgress);
+                }
+            }, 500); // 每0.5秒更新一次，让进度更平滑
+        }
+        
+        function stopSmartProgress() {
+            if (progressTimer) {
+                clearInterval(progressTimer);
+                progressTimer = null;
+            }
+        }
+        
+        // 取消请求
+        function cancelRequest() {
+            if (currentRequest) {
+                currentRequest.cancel('用户取消了请求');
+                currentRequest = null;
+            }
+            stopSmartProgress();
+            showLoading(false);
+            updateProgress(0);
+            retryCount = 0;
+        }
+        
+        // 显示状态消息
+        function showStatus(message, type, duration = 3000) {
+            const statusMessage = document.getElementById('statusMessage');
+            const statusContent = document.getElementById('statusContent');
+            const statusText = document.getElementById('statusText');
+            
+            if (!message) {
+                statusMessage.classList.add('hidden');
+                return;
+            }
+            
+            statusText.textContent = message;
+            statusContent.className = 'inline-flex items-center px-4 py-2 rounded-lg shadow-lg transition-all duration-200 ';
+            
+            if (type === 'success') {
+                statusContent.className += 'bg-green-100 text-green-800 border border-green-200';
+            } else if (type === 'error') {
+                statusContent.className += 'bg-red-100 text-red-800 border border-red-200';
+            } else {
+                statusContent.className += 'bg-blue-100 text-blue-800 border border-blue-200';
+            }
+            
+            statusMessage.classList.remove('hidden');
+            
+            // 自定义时长后自动隐藏
+            setTimeout(() => {
+                statusMessage.classList.add('hidden');
+            }, duration);
+        }
+        
+        // 复制到剪贴板
+        // 根据显示模式生成文本内容
+        function generateTextContent() {
+            if (!transcriptData) return '';
+            
+            const displayMode = document.getElementById('displayModeSelect')?.value || 'continuous';
+            
+            switch(displayMode) {
+                case 'timestamp':
+                    if (transcriptData.segments && transcriptData.segments.length > 0) {
+                        return transcriptData.segments.map(segment => 
+                            `[${formatTime(segment.start)}] ${segment.text.trim()}`
+                        ).join('\n');
+                    }
+                    return transcriptData.text;
+                    
+                case 'plain':
+                    return transcriptData.text;
+                    
+                case 'continuous':
+                default:
+                    if (transcriptData.segments && transcriptData.segments.length > 0) {
+                        // 连续模式按段落分组，每段换行
+                        let paragraphs = [];
+                        let currentParagraphText = '';
+                        
+                        transcriptData.segments.forEach((segment, index) => {
+                            currentParagraphText += segment.text;
+                            
+                            // 智能分段：检测句子结束或达到一定长度
+                            const isEndOfSentence = segment.text.match(/[。！？]\s*$/);
+                            const isLongParagraph = currentParagraphText.length > 150;
+                            const isLastSegment = index === transcriptData.segments.length - 1;
+                            
+                            if (isEndOfSentence || isLongParagraph || isLastSegment) {
+                                paragraphs.push(currentParagraphText.trim());
+                                currentParagraphText = '';
+                            }
+                        });
+                        
+                        return paragraphs.join('\n\n');
+                    }
+                    return transcriptData.text;
+            }
+        }
+        
+        function copyToClipboard() {
+            const text = generateTextContent();
+            if (!text) {
+                showStatus('没有可复制的内容', 'error');
+                return;
+            }
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const mode = document.getElementById('displayModeSelect')?.value || 'continuous';
+                const modeText = mode === 'timestamp' ? '（含时间戳）' : '';
+                showStatus(`已复制到剪贴板${modeText}`, 'success');
+            }).catch(() => {
+                showStatus('复制失败', 'error');
+            });
+        }
+        
+        // 下载结果
+        function downloadResult() {
+            const text = generateTextContent();
+            if (!text) {
+                showStatus('没有可下载的内容', 'error');
+                return;
+            }
+            
+            const mode = document.getElementById('displayModeSelect')?.value || 'continuous';
+            const modeText = mode === 'timestamp' ? '_时间戳模式' : mode === 'plain' ? '_纯文本模式' : '_连续模式';
+            
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `转录结果${modeText}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showStatus(`已下载${mode === 'timestamp' ? '（含时间戳）' : ''}`, 'success');
+        }
+        
+        // 清除设置
+        function clearSettings() {
+            // 关闭转录弹窗（如果存在）
+            if (document.getElementById('transcribeModal')) {
+                closeTranscribeModal();
+            }
+            
+            removeFile();
+            document.getElementById('modelSelect').value = 'tiny';
+            document.getElementById('languageSelect').value = '';
+            document.getElementById('taskSelect').value = 'transcribe';
+            document.getElementById('temperature').value = '0.1';
+            document.getElementById('tempValue').textContent = '0.1';
+            document.getElementById('wordTimestamps').checked = false;
+            showStatus('', '');
+            
+            // 将AI工具移回底部
+            moveAIToolToBottom();
+        }
+        
+        // 重新上传文件功能
+        function reuploadFile() {
+            // 关闭转录弹窗（如果存在）
+            if (document.getElementById('transcribeModal')) {
+                closeTranscribeModal();
+            }
+            
+            // 清除当前文件和转录结果
+            removeFile();
+            
+            // 隐藏转录结果区域
+            transcriptSection.classList.add('hidden');
+            
+            // 隐藏转录信息
+            document.getElementById('transcriptInfo').classList.add('hidden');
+            
+            // 移除重新上传按钮
+            const reuploadButtonContainer = document.getElementById('reuploadButtonContainer');
+            if (reuploadButtonContainer) {
+                reuploadButtonContainer.remove();
+            }
+            
+            // 将转录信息移回原位置
+            moveTranscriptInfoToOriginalPosition();
+            
+            // 将AI工具移回底部
+            moveAIToolToBottom();
+            
+            // 显示状态提示
+            showStatus('请重新选择音频文件', 'info');
+        }
+        
+        // 从弹窗重新上传文件
+        function reuploadFromModal() {
+            // 关闭弹窗
+            closeTranscribeModal();
+            
+            // 清除当前文件
+            removeFile();
+            
+            // 显示状态提示
+            showStatus('请重新选择音频文件', 'info');
+        }
+        
+        // 转换转录文本为简体中文
+        function convertTranscriptToSimplified() {
+            if (!transcriptData || !transcriptData.text) {
+                showStatus('没有可转换的转录内容', 'error');
+                return;
+            }
+            
+            // 转换主文本
+            const originalText = transcriptData.text;
+            const convertedText = convertToSimplified(originalText);
+            transcriptData.text = convertedText;
+            
+            // 如果有segments，也要转换segments中的文本
+            if (transcriptData.segments && transcriptData.segments.length > 0) {
+                transcriptData.segments.forEach(segment => {
+                    segment.text = convertToSimplified(segment.text);
+                });
+                
+                // 重新显示转录结果，保持segments结构和时间戳功能
+                const transcriptText = document.getElementById('transcriptText');
+                transcriptText.innerHTML = '';
+                
+                transcriptData.segments.forEach((segment, index) => {
+                    const span = document.createElement('span');
+                    span.className = 'transcript-segment';
+                    span.textContent = segment.text;
+                    span.onclick = () => seekToTime(segment.start);
+                    span.title = `${formatTime(segment.start)} - ${formatTime(segment.end)}`;
+                    transcriptText.appendChild(span);
+                    
+                    // 添加空格
+                    if (index < transcriptData.segments.length - 1) {
+                        transcriptText.appendChild(document.createTextNode(' '));
+                    }
+                });
+            } else {
+                // 如果没有segments，直接更新文本显示
+                document.getElementById('transcriptText').textContent = convertedText;
+            }
+            
+            showStatus('已转换为简体中文', 'success');
+        }
+        
+        // 保存用户设置
+        function saveUserSettings() {
+            const settings = {
+                model: document.getElementById('modelSelect').value,
+                language: document.getElementById('languageSelect').value,
+                task: document.getElementById('taskSelect').value,
+                temperature: document.getElementById('temperature').value,
+                wordTimestamps: document.getElementById('wordTimestamps').checked
+            };
+            localStorage.setItem('voiceTranscriptionSettings', JSON.stringify(settings));
+        }
+        
+        // 加载用户设置
+        function loadUserSettings() {
+            const saved = localStorage.getItem('voiceTranscriptionSettings');
+            if (saved) {
+                try {
+                    const settings = JSON.parse(saved);
+                    document.getElementById('modelSelect').value = settings.model || 'tiny';
+                    document.getElementById('languageSelect').value = settings.language || '';
+                    document.getElementById('taskSelect').value = settings.task || 'transcribe';
+                    document.getElementById('temperature').value = settings.temperature || '0.1';
+                    document.getElementById('tempValue').textContent = settings.temperature || '0.1';
+                    document.getElementById('wordTimestamps').checked = settings.wordTimestamps !== undefined ? settings.wordTimestamps : true;
+                } catch (e) {
+                    console.error('加载设置失败:', e);
+                }
+            }
+        }
+        
+        // 标签页切换功能（已简化，只保留设置标签）
+        function switchTab(tabName) {
+            // 由于只有设置标签，此函数现在只是保持兼容性
+            const settingsPanel = document.getElementById('settingsPanel');
+            if (settingsPanel) {
+                settingsPanel.classList.remove('hidden');
+            }
+        }
+        
+        // 繁简转换功能已移至独立文件 traditional-simplified-mapping.js
+        
+        // AI工具位置控制函数
+        function moveAIToolToTop() {
+            const aiToolContainer = document.getElementById('aiToolContainer');
+            if (aiToolContainer) {
+                aiToolContainer.classList.remove('order-last');
+                aiToolContainer.classList.add('order-first');
+                aiToolContainer.style.transition = 'all 0.5s ease-in-out';
+            }
+        }
+        
+        function moveAIToolToBottom() {
+            const aiToolContainer = document.getElementById('aiToolContainer');
+            if (aiToolContainer) {
+                aiToolContainer.classList.remove('order-first');
+                aiToolContainer.classList.add('order-last');
+                aiToolContainer.style.transition = 'all 0.5s ease-in-out';
+            }
+        }
+        
+        // 将转录信息移动到AI工具下面
+        function moveTranscriptInfoToAITool() {
+            const aiToolContainer = document.getElementById('aiToolContainer');
+            const transcriptInfo = document.getElementById('transcriptInfo');
+            const settingsPanel = document.getElementById('settingsPanel');
+            
+            if (aiToolContainer && transcriptInfo && settingsPanel) {
+                // 显示转录信息
+                transcriptInfo.classList.remove('hidden');
+                
+                // 移除原有的padding和位置
+                transcriptInfo.classList.remove('p-4');
+                transcriptInfo.classList.add('mb-4');
+                
+                // 将转录信息插入到AI工具容器后面
+                aiToolContainer.parentNode.insertBefore(transcriptInfo, aiToolContainer.nextSibling);
+                
+                // 在转录信息后面添加重新上传按钮
+                addReuploadButtonAfterTranscriptInfo();
+            }
+        }
+        
+        // 在转录信息后面添加重新上传按钮
+         function addReuploadButtonAfterTranscriptInfo() {
+             const transcriptInfo = document.getElementById('transcriptInfo');
+             
+             // 检查是否已经存在重新上传按钮
+             if (document.getElementById('reuploadButtonContainer')) {
+                 return;
+             }
+             
+             const reuploadContainer = document.createElement('div');
+             reuploadContainer.id = 'reuploadButtonContainer';
+             reuploadContainer.className = 'mb-6';
+             reuploadContainer.innerHTML = `
+                 <button onclick="reuploadFile()" class="w-full bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-500 hover:to-sky-600 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center justify-center group">
+                     <i class="fas fa-upload mr-2 group-hover:scale-110 transition-transform duration-200"></i>
+                     <span>重新上传</span>
+                 </button>
+             `;
+             
+             // 将重新上传按钮插入到转录信息后面
+             transcriptInfo.parentNode.insertBefore(reuploadContainer, transcriptInfo.nextSibling);
+         }
+         
+         // 将转录信息移回原位置
+         function moveTranscriptInfoToOriginalPosition() {
+             const transcriptInfo = document.getElementById('transcriptInfo');
+             const sidebar = document.querySelector('.sidebar');
+             
+             if (transcriptInfo && sidebar) {
+                 // 恢复原有的样式
+                 transcriptInfo.classList.add('p-4');
+                 transcriptInfo.classList.remove('mb-4');
+                 
+                 // 将转录信息移回sidebar中的原位置
+                 sidebar.appendChild(transcriptInfo);
+             }
+         }
+        
+        // 页面初始化时确保AI工具在底部
+        document.addEventListener('DOMContentLoaded', function() {
+            moveAIToolToBottom();
+        });
+
+        // 保存设置事件监听
+        ['modelSelect', 'languageSelect', 'taskSelect', 'temperature', 'wordTimestamps'].forEach(id => {
+            document.getElementById(id).addEventListener('change', saveUserSettings);
+        });
+        
+        // 文本编辑功能
+        let isEditMode = false;
+        let originalTranscriptData = null;
+        
+        function toggleEditMode() {
+            const transcriptText = document.getElementById('transcriptText');
+            const editBtn = document.getElementById('editBtn');
+            const saveBtn = document.getElementById('saveBtn');
+            const cancelBtn = document.getElementById('cancelBtn');
+            
+            if (!isEditMode) {
+                // 进入编辑模式
+                isEditMode = true;
+                originalTranscriptData = transcriptData ? JSON.parse(JSON.stringify(transcriptData)) : null;
+                
+                // 将转录文本转换为可编辑的textarea
+                const currentText = transcriptText.textContent || transcriptText.innerText;
+                
+                // 创建编辑容器
+                const editContainer = document.createElement('div');
+                editContainer.className = 'edit-mode-container p-4 rounded-xl border-2 border-dashed border-blue-300 bg-gradient-to-br from-blue-50/50 to-indigo-50/30';
+                
+                // 创建编辑工具栏
+                const toolbar = document.createElement('div');
+                toolbar.className = 'flex items-center justify-between mb-3 pb-2 border-b border-blue-200/50';
+                toolbar.innerHTML = `
+                    <div class="flex items-center gap-2 text-sm text-blue-600">
+                        <i class="fas fa-edit"></i>
+                        <span class="font-medium">编辑模式</span>
+                        <span class="text-blue-400">|</span>
+                        <span class="text-xs text-blue-500">Ctrl+S 保存 • Esc 取消</span>
+                    </div>
+                    <div id="wordCount" class="text-xs text-gray-500 bg-white/70 px-2 py-1 rounded-full">
+                        字数: 0
+                    </div>
+                `;
+                
+                // 创建文本编辑区域
+                const textarea = document.createElement('textarea');
+                textarea.id = 'editableText';
+                textarea.className = 'w-full min-h-[250px] p-4 border-0 rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none resize-none text-gray-800 leading-relaxed bg-white/80 backdrop-blur-sm shadow-inner';
+                textarea.placeholder = '在此编辑转录文本...\n\n提示：\n• 使用 Ctrl+S 快速保存\n• 使用 Esc 取消编辑\n• 支持自动保存草稿';
+                textarea.value = currentText;
+                
+                // 添加实时字数统计
+                textarea.addEventListener('input', updateWordCount);
+                
+                // 添加快捷键支持
+                textarea.addEventListener('keydown', handleEditKeydown);
+                
+                editContainer.appendChild(toolbar);
+                editContainer.appendChild(textarea);
+                transcriptText.innerHTML = '';
+                transcriptText.appendChild(editContainer);
+                
+                // 切换按钮显示
+                editBtn.classList.add('hidden');
+                saveBtn.classList.remove('hidden');
+                cancelBtn.classList.remove('hidden');
+                
+                // 聚焦到编辑框并更新字数
+                textarea.focus();
+                updateWordCount();
+                
+                // 启动自动保存草稿
+                startAutoSaveDraft();
+                
+                showStatus('已进入编辑模式 - 支持快捷键操作', 'info');
+            }
+        }
+        
+        function saveEditedText() {
+            const editableText = document.getElementById('editableText');
+            if (!editableText) return;
+            
+            const newText = editableText.value.trim();
+            if (!newText) {
+                showStatus('文本内容不能为空', 'error');
+                return;
+            }
+            
+            // 更新转录数据
+            if (transcriptData) {
+                transcriptData.text = newText;
+                // 清除segments数据，因为编辑后时间戳不再准确
+                transcriptData.segments = null;
+            }
+            
+            // 退出编辑模式并显示新文本
+            exitEditMode();
+            displayEditedText(newText);
+            
+            showStatus('文本已保存', 'success');
+        }
+        
+        function cancelEdit() {
+            // 恢复原始数据
+            if (originalTranscriptData) {
+                transcriptData = originalTranscriptData;
+            }
+            
+            // 退出编辑模式并恢复原始显示
+            exitEditMode();
+            
+            // 重新显示原始转录结果
+            if (transcriptData) {
+                displayTranscriptResult(transcriptData);
+            }
+            
+            showStatus('已取消编辑', 'info');
+        }
+        
+        function exitEditMode() {
+            isEditMode = false;
+            originalTranscriptData = null;
+            
+            // 停止自动保存
+            stopAutoSaveDraft();
+            
+            const editBtn = document.getElementById('editBtn');
+            const saveBtn = document.getElementById('saveBtn');
+            const cancelBtn = document.getElementById('cancelBtn');
+            
+            // 切换按钮显示
+            editBtn.classList.remove('hidden');
+            saveBtn.classList.add('hidden');
+            cancelBtn.classList.add('hidden');
+        }
+        
+        // 编辑功能辅助函数
+        let autoSaveInterval = null;
+        let draftKey = 'transcript_draft_' + Date.now();
+        
+        function updateWordCount() {
+            const editableText = document.getElementById('editableText');
+            const wordCountEl = document.getElementById('wordCount');
+            
+            if (editableText && wordCountEl) {
+                const text = editableText.value;
+                const charCount = text.length;
+                const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+                const lineCount = text.split('\n').length;
+                
+                wordCountEl.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span>字数: ${charCount}</span>
+                        <span class="text-gray-400">|</span>
+                        <span>词数: ${wordCount}</span>
+                        <span class="text-gray-400">|</span>
+                        <span>行数: ${lineCount}</span>
+                    </div>
+                `;
+            }
+        }
+        
+        function handleEditKeydown(event) {
+            // Ctrl+S 保存
+            if (event.ctrlKey && event.key === 's') {
+                event.preventDefault();
+                saveEditedText();
+                return;
+            }
+            
+            // Esc 取消
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelEdit();
+                return;
+            }
+            
+            // Tab 插入缩进而不是切换焦点
+            if (event.key === 'Tab') {
+                event.preventDefault();
+                const textarea = event.target;
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                
+                textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
+                textarea.selectionStart = textarea.selectionEnd = start + 4;
+                updateWordCount();
+            }
+        }
+        
+        function startAutoSaveDraft() {
+            // 每30秒自动保存草稿
+            autoSaveInterval = setInterval(() => {
+                const editableText = document.getElementById('editableText');
+                if (editableText && editableText.value.trim()) {
+                    localStorage.setItem(draftKey, editableText.value);
+                    showStatus('草稿已自动保存', 'info', 2000);
+                }
+            }, 30000);
+        }
+        
+        function stopAutoSaveDraft() {
+            if (autoSaveInterval) {
+                clearInterval(autoSaveInterval);
+                autoSaveInterval = null;
+            }
+            // 清除草稿
+            localStorage.removeItem(draftKey);
+        }
+        
+        function loadDraft() {
+            const draft = localStorage.getItem(draftKey);
+            if (draft) {
+                const editableText = document.getElementById('editableText');
+                if (editableText) {
+                    editableText.value = draft;
+                    updateWordCount();
+                    showStatus('已恢复草稿内容', 'success');
+                }
+            }
+        }
+        
+        function displayEditedText(text) {
+            const transcriptText = document.getElementById('transcriptText');
+            transcriptText.innerHTML = '';
+            
+            // 创建编辑后的文本显示，添加编辑标识
+            const textContainer = document.createElement('div');
+            textContainer.className = 'relative';
+            
+            const editedBadge = document.createElement('div');
+            editedBadge.className = 'absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full';
+            editedBadge.innerHTML = '<i class="fas fa-edit mr-1"></i>已编辑';
+            
+            const textContent = document.createElement('div');
+            textContent.className = 'text-neutral-800 leading-relaxed';
+            textContent.textContent = text;
+            
+            textContainer.appendChild(editedBadge);
+            textContainer.appendChild(textContent);
+            transcriptText.appendChild(textContainer);
+        }
+        
+        function displayTranscriptResult(data) {
+            const transcriptText = document.getElementById('transcriptText');
+            transcriptText.innerHTML = '';
+            
+            // 获取显示模式
+            const displayMode = document.getElementById('displayModeSelect')?.value || 'continuous';
+            
+            // 根据显示模式选择不同的显示方式
+            switch(displayMode) {
+                case 'timestamp':
+                    if (data.segments && data.segments.length > 0) {
+                        displayTimestampMode(data, transcriptText);
+                    } else {
+                        displayPlainTextMode(data, transcriptText);
+                    }
+                    break;
+                case 'plain':
+                    displayPlainTextMode(data, transcriptText);
+                    break;
+                case 'continuous':
+                default:
+                    if (data.segments && data.segments.length > 0) {
+                        displayContinuousMode(data, transcriptText);
+                    } else {
+                        displayPlainTextMode(data, transcriptText);
+                    }
+                    break;
+            }
+        }
+        
+        // 切换显示模式
+        function changeDisplayMode() {
+            if (transcriptData) {
+                displayTranscriptResult(transcriptData);
+                
+                const mode = document.getElementById('displayModeSelect').value;
+                const modeNames = {
+                    'continuous': '连续模式',
+                    'timestamp': '时间戳模式',
+                    'plain': '纯文本模式'
+                };
+                showStatus(`已切换到${modeNames[mode]}`, 'success');
+            }
+        }
+        
+        // 时间戳模式显示（讯飞听见风格）
+        function displayTimestampMode(data, container) {
+            container.className = 'timestamp-mode-container transcript-scroll space-y-2 max-h-96 overflow-y-auto';
+            
+            // 添加加载动画
+            container.classList.add('transcript-loading');
+            
+            data.segments.forEach((segment, index) => {
+                const segmentRow = document.createElement('div');
+                segmentRow.className = 'segment-row flex items-start gap-4 p-4 rounded-xl cursor-pointer group transition-all duration-200 hover:bg-gray-50/80 hover:shadow-sm border border-transparent hover:border-gray-200/60 interactive-element';
+                
+                // 为长文本添加特殊样式
+                if (segment.text.length > 150) {
+                    segmentRow.classList.add('long-segment');
+                }
+                
+                // 添加出现动画，延迟显示每个段落
+                segmentRow.style.opacity = '0';
+                segmentRow.style.transform = 'translateY(20px)';
+                
+                segmentRow.onclick = () => {
+                    seekToTime(segment.start, segment);
+                    // 添加播放状态
+                    document.querySelectorAll('.segment-row').forEach(row => row.classList.remove('playing'));
+                    segmentRow.classList.add('playing');
+                };
+                
+                // 时间戳标签
+                const timeLabel = document.createElement('div');
+                timeLabel.className = 'flex-shrink-0 text-xs font-mono text-blue-600 bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg min-w-[90px] text-center group-hover:bg-blue-100 group-hover:border-blue-300 transition-all duration-200 font-medium shadow-sm';
+                timeLabel.innerHTML = `
+                    <div class="text-blue-700 font-semibold">${formatTime(segment.start)}</div>
+                    <div class="text-blue-500 text-[10px] mt-0.5 opacity-75">点击播放</div>
+                `;
+                
+                // 文本内容
+                const textContent = document.createElement('div');
+                textContent.className = 'flex-1 text-gray-700 leading-relaxed text-sm group-hover:text-gray-900 font-normal px-2';
+                
+                // 添加文本长度指示器
+                if (segment.text.length > 100) {
+                    textContent.classList.add('text-justify');
+                }
+                textContent.textContent = segment.text.trim();
+                
+                // 时长和操作区域（悬停时显示）
+                const actionArea = document.createElement('div');
+                actionArea.className = 'flex-shrink-0 flex flex-col items-end gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200';
+                
+                const timeRange = document.createElement('div');
+                timeRange.className = 'text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded text-center';
+                timeRange.textContent = formatTimeRange(segment.start, segment.end, true);
+                
+                const playButton = document.createElement('button');
+                playButton.className = 'flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded transition-all duration-200 border border-blue-200 hover:border-blue-300';
+                playButton.innerHTML = '<i class="fas fa-play text-[10px]"></i><span>播放</span>';
+                playButton.onclick = (e) => {
+                    e.stopPropagation();
+                    seekToTime(segment.start, segment);
+                    // 添加播放状态
+                    document.querySelectorAll('.segment-row').forEach(row => row.classList.remove('playing'));
+                    segmentRow.classList.add('playing');
+                };
+                
+                actionArea.appendChild(timeRange);
+                actionArea.appendChild(playButton);
+                
+                segmentRow.appendChild(timeLabel);
+                segmentRow.appendChild(textContent);
+                segmentRow.appendChild(actionArea);
+                container.appendChild(segmentRow);
+                
+                // 延迟显示动画
+                setTimeout(() => {
+                    segmentRow.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+                    segmentRow.style.opacity = '1';
+                    segmentRow.style.transform = 'translateY(0)';
+                    segmentRow.classList.add('text-appear');
+                }, index * 100);
+            });
+            
+            // 移除加载动画
+            setTimeout(() => {
+                container.classList.remove('transcript-loading');
+            }, data.segments.length * 100 + 500);
+        }
+        
+        // 连续模式显示（讯飞听见风格段落式）
+        function displayContinuousMode(data, container) {
+            container.className = 'continuous-mode-container transcript-scroll leading-relaxed text-gray-700 space-y-3';
+            
+            // 添加加载动画
+            container.classList.add('transcript-loading');
+            
+            let currentParagraph = null;
+            let paragraphText = '';
+            let paragraphSegments = [];
+            let paragraphIndex = 0;
+            
+            data.segments.forEach((segment, index) => {
+                paragraphText += segment.text;
+                paragraphSegments.push(segment);
+                
+                // 智能分段：检测句子结束或达到一定长度
+                const isEndOfSentence = segment.text.match(/[。！？]\s*$/);
+                const isLongParagraph = paragraphText.length > 150;
+                const isLastSegment = index === data.segments.length - 1;
+                
+                if (isEndOfSentence || isLongParagraph || isLastSegment) {
+                    // 创建段落容器
+                    const paragraphDiv = document.createElement('div');
+                    paragraphDiv.className = 'paragraph-block p-4 bg-gradient-to-r from-gray-50/80 to-white/90 rounded-xl border border-gray-200/60 hover:border-blue-300/60 transition-all duration-300 hover:shadow-md group interactive-element';
+                    
+                    // 添加出现动画
+                    paragraphDiv.style.opacity = '0';
+                    paragraphDiv.style.transform = 'translateY(20px)';
+                    
+                    // 段落内容
+                    const paragraphContent = document.createElement('div');
+                    paragraphContent.className = 'paragraph-content text-sm leading-relaxed';
+                    
+                    paragraphSegments.forEach((seg, segIndex) => {
+                        const segmentSpan = document.createElement('span');
+                        segmentSpan.className = 'transcript-segment cursor-pointer hover:bg-blue-100/70 px-1 py-0.5 rounded transition-all duration-200 relative';
+                        segmentSpan.textContent = seg.text;
+                        segmentSpan.onclick = () => {
+                            seekToTime(seg.start);
+                        };
+                        
+                        // 时间戳提示
+                        segmentSpan.title = `${formatTime(seg.start)} - ${formatTime(seg.end)}`;
+                        
+                        paragraphContent.appendChild(segmentSpan);
+                        
+                        // 添加适当的空格
+                        if (segIndex < paragraphSegments.length - 1) {
+                            paragraphContent.appendChild(document.createTextNode(' '));
+                        }
+                    });
+                    
+                    // 段落时间信息
+                    const timeInfo = document.createElement('div');
+                    timeInfo.className = 'paragraph-time flex items-center justify-between mt-3 pt-2 border-t border-gray-200/50 text-xs text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300';
+                    
+                    const startTime = paragraphSegments[0].start;
+                    const endTime = paragraphSegments[paragraphSegments.length - 1].end;
+                    
+                    timeInfo.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-clock text-blue-400"></i>
+                            <span>${formatTime(startTime)} - ${formatTime(endTime)}</span>
+                        </div>
+                        <div class="flex items-center gap-1 text-blue-500 hover:text-blue-600 cursor-pointer" onclick="seekToTime(${startTime})">
+                            <i class="fas fa-play text-xs"></i>
+                            <span>播放此段</span>
+                        </div>
+                    `;
+                    
+                    paragraphDiv.appendChild(paragraphContent);
+                    paragraphDiv.appendChild(timeInfo);
+                    container.appendChild(paragraphDiv);
+                    
+                    // 延迟显示动画
+                    setTimeout(() => {
+                        paragraphDiv.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+                        paragraphDiv.style.opacity = '1';
+                        paragraphDiv.style.transform = 'translateY(0)';
+                        paragraphDiv.classList.add('text-appear');
+                    }, paragraphIndex * 150);
+                    
+                    paragraphIndex++;
+                    
+                    // 重置段落状态
+                    paragraphText = '';
+                    paragraphSegments = [];
+                }
+            });
+            
+            // 移除加载动画
+            setTimeout(() => {
+                container.classList.remove('transcript-loading');
+            }, paragraphIndex * 150 + 500);
+        }
+        
+        // 纯文本模式显示
+        function displayPlainTextMode(data, container) {
+            container.className = 'leading-relaxed text-neutral-800 whitespace-pre-wrap';
+            
+            // 添加加载动画
+            container.classList.add('transcript-loading');
+            
+            const textContainer = document.createElement('div');
+            textContainer.className = 'p-4 bg-neutral-50/50 rounded-lg border border-neutral-200 interactive-element';
+            textContainer.textContent = data.text;
+            
+            // 添加出现动画
+            textContainer.style.opacity = '0';
+            textContainer.style.transform = 'translateY(20px)';
+            
+            container.appendChild(textContainer);
+            
+            // 延迟显示动画
+            setTimeout(() => {
+                textContainer.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+                textContainer.style.opacity = '1';
+                textContainer.style.transform = 'translateY(0)';
+                textContainer.classList.add('text-appear');
+                
+                // 移除加载动画
+                container.classList.remove('transcript-loading');
+            }, 300);
+        }
+        
+        // 生成AI总结（调用 sparkAPI 流式输出）
+        async function generateAISummary() {
+            try {
+                const btn = document.getElementById('aiSummaryBtn');
+                const regenBtn = document.getElementById('regenSummaryBtn');
+                if (btn) { btn.disabled = true; btn.classList.add('opacity-60', 'cursor-not-allowed'); }
+                if (regenBtn) { regenBtn.disabled = true; regenBtn.classList.add('opacity-60', 'cursor-not-allowed'); }
+                
+                const textEl = document.getElementById('transcriptText');
+                const sourceText = (textEl?.innerText || '').trim();
+                if (!sourceText) {
+                    showStatus('暂无可总结的转录文本', 'error');
+                    if (btn) { btn.disabled = false; btn.classList.remove('opacity-60', 'cursor-not-allowed'); }
+                    if (regenBtn) { regenBtn.disabled = false; regenBtn.classList.remove('opacity-60', 'cursor-not-allowed'); }
+                    return;
+                }
+                
+                // 显示总结区
+                let summarySection = document.getElementById('aiSummarySection');
+                if (!summarySection) {
+                    // 如果没找到，动态插入在 transcriptSection 后
+                    const container = document.getElementById('transcriptSection');
+                    summarySection = document.createElement('div');
+                    summarySection.id = 'aiSummarySection';
+                    summarySection.className = 'animate-fade-in-up';
+                    summarySection.innerHTML = `
+                        <div class="relative bg-gradient-to-br from-white via-indigo-50/40 to-purple-50/30 backdrop-blur-xl rounded-xl border border-indigo-200/50 p-4 shadow-lg mt-3 hover:shadow-xl hover:border-indigo-300/60 transition-all duration-300 group overflow-hidden">
+                            <!-- 装饰性背景光效 -->
+                            <div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-indigo-200/20 to-transparent rounded-full blur-xl opacity-60 group-hover:opacity-80 transition-opacity duration-300"></div>
+                            <div class="absolute bottom-0 left-0 w-12 h-12 bg-gradient-to-tr from-purple-200/20 to-transparent rounded-full blur-lg opacity-40 group-hover:opacity-60 transition-opacity duration-300"></div>
+                            
+                            <div class="relative z-10">
+                                <div class="flex items-center justify-between mb-3">
+                                    <div class="flex items-center">
+                                        <div class="w-7 h-7 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-lg flex items-center justify-center mr-2.5 shadow-lg shadow-indigo-200/50 group-hover:shadow-indigo-300/60 transition-all duration-300">
+                                            <i class="fas fa-sparkles text-white text-xs animate-pulse"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-base font-semibold bg-gradient-to-r from-neutral-900 to-neutral-700 bg-clip-text text-transparent">AI 智能总结</h3>
+                                            <p class="text-xs text-neutral-500/80">基于转录内容生成的智能摘要</p>
+                                        </div>
+                                    </div>
+                                    <button id="regenSummaryBtn" onclick="generateAISummary()" class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-indigo-700 bg-gradient-to-r from-indigo-50 to-purple-50 hover:from-indigo-100 hover:to-purple-100 rounded-lg border border-indigo-200/60 hover:border-indigo-300/80 transition-all duration-200 hover:shadow-md shadow-sm group/btn">
+                                        <i class="fas fa-redo-alt mr-1.5 group-hover/btn:rotate-180 transition-transform duration-300"></i>
+                                        重新生成
+                                    </button>
+                                </div>
+                                <div id="aiSummaryContent" class="bg-gradient-to-br from-white/90 to-indigo-50/30 rounded-lg p-3.5 text-neutral-800 leading-relaxed whitespace-pre-wrap border border-white/60 min-h-[60px] shadow-inner backdrop-blur-sm text-sm relative overflow-hidden">
+                                    <!-- 内容区域装饰 -->
+                                    <div class="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-indigo-200/50 to-transparent"></div>
+                                </div>
+                            </div>
+                        </div>`;
+                    container.parentNode.insertBefore(summarySection, container.nextSibling);
+                }
+                
+                // 显示AI总结区域
+                summarySection.classList.remove('hidden');
+                const contentEl = document.getElementById('aiSummaryContent');
+                if (contentEl) contentEl.innerHTML = '<div class="flex items-center text-sm text-neutral-500"><div class="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin mr-2"></div> 正在生成总结...</div>';
+                
+                // 自动滚动到AI总结区域
+                setTimeout(() => {
+                    summarySection.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'start' 
+                    });
+                }, 100);
+                
+                if (!window.sparkAPI) {
+                    if (contentEl) contentEl.textContent = '无法调用AI服务：sparkAPI未加载';
+                    showStatus('AI服务未就绪，请稍后再试', 'error');
+                    if (btn) { btn.disabled = false; btn.classList.remove('opacity-60', 'cursor-not-allowed'); }
+                    if (regenBtn) { regenBtn.disabled = false; regenBtn.classList.remove('opacity-60', 'cursor-not-allowed'); }
+                    return;
+                }
+                
+                window.sparkAPI.setResponseCallback((content, type, isDone) => {
+                    if (!contentEl) return;
+                    if (type === 'error') {
+                        contentEl.textContent = String(content);
+                        if (btn) { btn.disabled = false; btn.classList.remove('opacity-60', 'cursor-not-allowed'); }
+                        if (regenBtn) { regenBtn.disabled = false; regenBtn.classList.remove('opacity-60', 'cursor-not-allowed'); }
+                        return;
+                    }
+                    contentEl.textContent = content;
+                    if (isDone) {
+                        if (btn) { btn.disabled = false; btn.classList.remove('opacity-60', 'cursor-not-allowed'); }
+                        if (regenBtn) { regenBtn.disabled = false; regenBtn.classList.remove('opacity-60', 'cursor-not-allowed'); }
+                    }
+                });
+                
+                const maxLen = 8000;
+                const clipped = sourceText.length > maxLen ? sourceText.slice(0, maxLen) : sourceText;
+                const prompt = `你的任务是对音频文字文本进行总结，然后提炼大纲，最后分析其中的关键信息。请仔细阅读以下音频文字文本：
+
+<audio_text>
+${clipped}
+</audio_text>
+
+在进行总结时，请用简洁的语言概括文本的主要内容，避免包含过多细节。
+在提炼大纲时，请梳理文本的结构和层次，以清晰的条目形式呈现。
+在分析关键信息时，请找出文本中最重要、最核心的内容，并说明其重要性和与整体的关系。`;
+                window.sparkAPI.sendMessage(prompt);
+            } catch (e) {
+                console.error('生成AI总结出错：', e);
+                showStatus('生成AI总结失败，请稍后再试', 'error');
+                const btn = document.getElementById('aiSummaryBtn');
+                const regenBtn = document.getElementById('regenSummaryBtn');
+                if (btn) { btn.disabled = false; btn.classList.remove('opacity-60', 'cursor-not-allowed'); }
+                if (regenBtn) { regenBtn.disabled = false; regenBtn.classList.remove('opacity-60', 'cursor-not-allowed'); }
+            }
+        }
+    </script>
+    
+    <!-- 固定在底部的音频播放器 -->
+    <div id="fixedAudioPlayer" class="fixed-audio-player hidden">
+        <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 audio-info-icon rounded-xl flex items-center justify-center">
+                        <i class="fas fa-music text-blue-600"></i>
+                    </div>
+                    <div>
+                        <h3 id="audioFileName" class="font-semibold text-gray-800 text-sm">音频文件</h3>
+                        <p id="audioFileSize" class="text-xs text-gray-500">文件大小</p>
+                    </div>
+                </div>
+                <button onclick="removeFile()" class="player-btn control-btn w-8 h-8 flex items-center justify-center bg-gradient-to-r from-red-100/60 to-red-50/80 hover:from-red-200/80 hover:to-red-100/90 border border-red-200/50 hover:border-red-300/70 rounded-lg transition-all duration-300 hover:shadow-md transform hover:-translate-y-0.5 group">
+                    <i class="fas fa-times text-red-500 text-xs group-hover:scale-110 transition-transform duration-200"></i>
+                </button>
+            </div>
+            
+            <!-- 播放控制 -->
+            <div class="flex items-center space-x-4">
+                <button id="playPauseBtn" onclick="togglePlayPause()" class="player-btn play-btn w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 group btn-click-feedback interactive-element">
+                    <i class="fas fa-play text-sm group-hover:scale-110 transition-transform duration-200"></i>
+                </button>
+                <button onclick="seekBackward()" class="player-btn control-btn w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-r from-neutral-100/80 to-white/90 hover:from-neutral-200/90 hover:to-neutral-100/95 border border-neutral-200/50 hover:border-neutral-300/70 text-neutral-600 hover:text-neutral-800 transition-all duration-300 hover:shadow-md transform hover:scale-110 group">
+                    <i class="fas fa-backward text-xs group-hover:scale-110 transition-transform duration-200"></i>
+                </button>
+                <button onclick="seekForward()" class="player-btn control-btn w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-r from-neutral-100/80 to-white/90 hover:from-neutral-200/90 hover:to-neutral-100/95 border border-neutral-200/50 hover:border-neutral-300/70 text-neutral-600 hover:text-neutral-800 transition-all duration-300 hover:shadow-md transform hover:scale-110 group">
+                    <i class="fas fa-forward text-xs group-hover:scale-110 transition-transform duration-200"></i>
+                </button>
+                <div class="flex-1 mx-4">
+                    <div class="relative">
+                        <div class="waveform w-full h-3 bg-gray-100 rounded-full cursor-pointer overflow-hidden" onclick="seekToPosition(event)">
+                            <div id="progressIndicator" class="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-sm font-medium text-gray-600 min-w-[80px] text-right">
+                    <span id="currentTimeDisplay">00:00</span> / <span id="totalTimeDisplay">00:00</span>
+                </div>
+            </div>
+            
+            <!-- 隐藏的音频元素 -->
+            <audio id="audioElement" preload="metadata"></audio>
+        </div>
+    </div>
+    
+</body>
+</html>
