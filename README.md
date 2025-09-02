@@ -1,4 +1,4 @@
-# 🎙️ SoundToWord - 智能语音转录与分析平台
+# AuraScribe-聆悟｜智能语音转录与分析平台
 
 <p align="center">
   <img src="https://img.shields.io/badge/Version-1.0.0-blueviolet" alt="Version">
